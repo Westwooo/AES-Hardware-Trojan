@@ -915,72 +915,20 @@ void generatePermutations(int *a, int l, int r) {
 
 int main (int argc, char *argv[]) {	
 	
-	//Check that a file to be processed has been supplied
-	if(argc < 2) {
-		printf("Please supply a file path to be processed\n");
-		return -1;
-	}
-	
+
 	//Open the json file to be processed and check success
-	char fileName[40];
-	strcpy(fileName, "./");
-	strcat(fileName, argv[1]);
-	RouteData = fopen(fileName, "r");
-	if(RouteData == NULL) {
-		printf("%s\n", argv[1]);
-		printf("Unable to open file\n");
-		exit(EXIT_FAILURE);
-	}
-	
-	//Open the file to write found S-Boxes to 
-	FILE * foundThem = fopen("./FPGA_S-Boxes.txt", "w");
-
-	int HammingWeight = 0;
-	
-	//List of tiles containing SBox LUTs
-	struct tile sBoxTiles[2000];
-	struct tile tilesWithFreeLUTs[10000];
-	
-	char tile[30];
-	
-	//Number of LUT6s implementing the Xor function
-	int XORcount = 0;	
-	int sBoxLUTS = 0;
-	
-	//Number of slices containing sBox LUTs
-	int tileIndex = 0;
-	int tileSet = 1;
-	int unusedTileSet = 1;
-	int setLUTs = 0;
-	int unusedLUTs = 0;
-	int unusedTileIndex = 0;
-
-	//Initialise the LUT inputs 
-	inputs[0] = &I0;
-	inputs[1] = &I1;
-	inputs[2] = &I2;
-	inputs[3] = &I3;
-	inputs[4] = &I4;
-	inputs[5] = &I5;
-	int str[] = {5,4,3,2,1,0};	
-	
-	//Generate all possible LUT INIT values
-	generatePermutations(str, 0, 5);
-	
-	//TESTING 
-	FILE * testingFile = fopen("./testingDictionary","w");
-	for(int i = 0; i < 720; i++){
-		for(int j = 0; j < MAXTABLES; j++){
-			fputs(dictionary[i+(720*j)], testingFile);
-			fputc(10, testingFile);
+	if(argc == 2) {
+		char fileName[40] = "./";
+		RouteData = fopen(strcat(fileName, argv[1]), "r");
+		if(RouteData == NULL) {
+			printf("Unable to open file\n");
+			exit(EXIT_FAILURE);
 		}
 	}
-
-	//Print some output for the user indicating progress
-	printf("FINDING S-BOX LUTS\n");
-	printf("-------------------------\n");
-	
-	int testCount = 0;
+	else {
+		printf("Please supply a file path to be processed\n");
+		exit(EXIT_FAILURE);
+	}
 	
 	//Read all connections from JSON file and store in connections[]
 	while(strcmp(word, "LUT_VALUES") != 0) {
@@ -1001,13 +949,45 @@ int main (int argc, char *argv[]) {
 		}
 	}
 	
-	printf("Connection Index: %d\n", connectionIndex);
+	//Open the file to write found S-Boxes to 
+	FILE * foundThem = fopen("./FPGA_S-Boxes.txt", "w");
+
+	//Initialise relevant variables and generate all LUT INIT values
+	inputs[0] = &I0;
+	inputs[1] = &I1;
+	inputs[2] = &I2;
+	inputs[3] = &I3;
+	inputs[4] = &I4;
+	inputs[5] = &I5;
+	int str[] = {5,4,3,2,1,0};	
+	generatePermutations(str, 0, 5);
 	
+	//TO DO - remove tilesWithFreeLUTs[]
+	//TO DO - write general variable description
+	
+	struct tile sBoxTiles[2000];				//Array holding all FPGA tiles implementing S-Boxes
+	int tileIndex = 0;							//Index of above array
+	struct tile tilesWithFreeLUTs[10000];		//TO DO - remove as unecessary 
+	int unusedTileSet = 1;
+	int unusedLUTs = 0;
+	int unusedTileIndex = 0;
+	struct tile allTiles[10000];				//Array holding all tiles on FPGA design
+	int allTileIndex = 0;						//Index of above array	
+	struct tile currentTile;					//The current tile having LUT contents read 
+	char tile[30];								//String to read the tile name into
+	int HammingWeight = 0;						//Hamming weight of LUT being read
+	int tileSet = 1;							//Boolean representing if tiles has already begun having contents read
+	int XORcount = 0;							//Number of LUTs implementing XOR function -- POSSIBLY UNECESSARY
+	int sBoxLUTS = 0;							//Number of LUT6s used to implement S-Boxes
+	int setLUTs = 0;							//Number of LUTs in use
+	
+	//Cartesian related variables - may not be necessary
 	int maxX, maxY = 0;
 	int xCoord, yCoord = 0;
-	struct tile currentTile;
-	struct tile allTiles[10000];
-	int allTileIndex = 0;
+
+	//Print some output for the user indicating progress
+	printf("FINDING S-BOX LUTS\n-------------------------\n");
+	printf("Number of Connections: %d\n", connectionIndex);
 	
 	//Find location of LUT6s implementing SBoxes and store information in sBoxTiles[]
 	/* Search the JSON file for any LUT6s used to partialy implement S-Boxes. Those found 
@@ -1016,7 +996,6 @@ int main (int argc, char *argv[]) {
 	while(next != EOF) {
 		
 		getNextWord(word);
-		testCount++;
 		
 		//If next word is tile name - Tile names are of the form "C*" where * is a letter (ascii > 57)
 		if (word[0] == C && word[1] > 57) {
@@ -1054,6 +1033,7 @@ int main (int argc, char *argv[]) {
 			if (HammingWeight > 2) {
 				setLUTs++;
 			}
+			//TO DO - remove this 
 			else {
 				unusedLUTs++;
 				if(unusedTileSet == 0) {
@@ -1098,13 +1078,6 @@ int main (int argc, char *argv[]) {
 							actualWord[wordPos++] = word[i];
 						}
 					}
-					/*
-					actualWord[wordPos-1] = 0;
-					printf(word);
-					printf("\n");
-					printf(actualWord);
-					printf("\n");
-					*/
 					
 					for (int i = 0; i < 720; i++){
 						for(int j = 0; j < MAXTABLES; j++) {
@@ -1206,19 +1179,6 @@ int main (int argc, char *argv[]) {
 		}
 	}
 	
-	//TESTING
-	int LUTcount = 0;
-	for(int i = 0; i < tileIndex; i++) {
-		LUTcount = 0;
-		for(int j = 0; j < 8; j++) {
-			LUTcount += sBoxTiles[i].LUT6s[j];
-		}
-		if(LUTcount != 4 && LUTcount != 8) {
-			printf("%d ", LUTcount);
-			printTile(sBoxTiles[i]);
-		}
-	}
-	
 	//Initialise the tilesSet array
 	for(int i = 0; i < MAX_X; i++) {
 		for(int j = 0; j < MAX_Y; j++) {
@@ -1263,38 +1223,15 @@ int main (int argc, char *argv[]) {
 	printf("-------------------------\n");
 	int setTables = 0;
 	
-	//Strings to test if a connection reaches a LUT or FFMUX
-	char MUXtest[8];
-	char LUTtest[8];
-
-	//Name and tile of the connection being searched for 
-	char searchName[30];
-	char searchTile[30];
-	char nextSearchName[30];
-	char nextSearchTile[30];
-	
-	//Boolean representing if a root connection is found, and a count of total SBox roots
-	int connectionFound = 0;
-	int connectionsFound = 0;
-	
-	//A list of MUX names and tiles that are sBox roots
-	char foundMUXNames[6][30];
-	char foundMUXTiles[6][30];
-	
-	int sBoxCount = 0;
-	
-	//An array representing a path through the FPGA
-	int path[500];
-	int pathIndex = 0;
-	
-	//Arays to handle branches in the FPGA paths
-	int pathBranches[200];
-	int branchPoint[200];
-	int branchIndex = 0;
-	
-	int testingCount = 0;
-	
-	char connectionA[20] = "CLE_CLE_L_SITE_0_A";
+	//Variables used to sort the LUTs into the S-Boxes they form
+	char MUXtest[8];								//String to test if a MUX has been found 
+	char searchName[30];							//Name of connection being searched for 
+	char searchTile[30];							//Name of tile connection being searched for 
+	int connectionsFound = 0;						//Number of S-Box connections found
+	char foundMUXNames[6][30];						//Name of MUXs found proceeding SBoxes
+	char foundMUXTiles[6][30];						//Tiles of MUXs found proceeding SBoxes
+	int sBoxCount = 0;								//Number fo SBoxes found
+	char connectionA[20] = "CLE_CLE_L_SITE_0_A";	//TO DO label variables
 	char connectionE[20] = "CLE_CLE_L_SITE_0_E";
 	
 	//Sort tiles into the S-Boxes to which they belong
@@ -1409,11 +1346,11 @@ int main (int argc, char *argv[]) {
 	}
 	
 	sBoxIndex--;
+	
+	//Process LUT8s with unfound roots
 	struct tile unconnectedTile[10];
 	int unconnectedIndex = 0;
 	int incompleteSBox = 0;
-	
-	//Process LUT8s with unfound roots
 	for (int i = 0; i < sBoxIndex; i++) {
 		if(sBoxes[i].foundLUT8s < 8 && sBoxes[i].foundLUT8s > 0) {
 			if(sBoxes[i].foundLUT8s < 2) {
@@ -1431,7 +1368,6 @@ int main (int argc, char *argv[]) {
 	
 	sBoxCount = 0;
 	for(int i = 0; i < sBoxIndex; i++) {		
-		//TESTING
 		if(sBoxes[i].foundLUT8s == 8) {
 			finalSBoxes[sBoxCount] = sBoxes[i];
 			sBoxCount++;
@@ -1443,37 +1379,28 @@ int main (int argc, char *argv[]) {
 	fflush(stdout);	
 	printf("\n\n\n");
 	
-	int foundConnections = 0;
-	
+
 	char LUTletter;
-		
-	char endNames[500][64];
-	int endCount[100];
-
-
 	int updated = 1;
-	
 	int LUTfound = 0;
-
 	char foundTile[30];
-	
 	char tileTest[10];
-	
 	int sBoxFound = 0;
-	
 	char possibleRootTiles[10][10][30];
 	char possibleRootNames[10][10][30];
 	int choicesPerBranch[10]; 
-	
 	int choices = 0;
 	int branches = 0;
 	int retracing = 0;
 	int retraceCounter = 0;
 	int testing = 0; 
 	int afterSboxesTotal = 0;
-	
 	int MUXnumber = 0;
+	char LUTtest[8];
+	char nextSearchName[30];
+	char nextSearchTile[30];
 	
+	//Output useful information to the user
 	printf("SORTING S-BOXES INTO ROUNDS\n");
 	printf("-------------------------\n");
 	
@@ -1482,8 +1409,6 @@ int main (int argc, char *argv[]) {
 		afterSboxesTotal = 0;
 
 		for(int lutIndex = 0; lutIndex < 8; lutIndex++) {
-			
-
 			
 			retracing = 0;
 			LUTfound = 0;
@@ -1667,17 +1592,10 @@ int main (int argc, char *argv[]) {
 			updated = 1;
 		}
 		
-		if(afterSboxesTotal == 0) {
-			
-		}
-		
 		finalSBoxes[sbIndex].followingLUTs = afterSboxesTotal;
-		
 		
 		printf("\rProgress: %d / %d", sbIndex, tileIndex/8);
 		fflush(stdout);
-		
-		
 	}
 	
 	printf("\rProgress: %d / %d", tileIndex/8, tileIndex/8);
@@ -1768,6 +1686,20 @@ int main (int argc, char *argv[]) {
 	
 	int searching = 0;
 	int testingTesting = 0;
+	int finalConnection = 0;
+	
+	char testSearchName[40];
+	char testSearchTile[40];
+	char testString[20];
+	
+	char lastTile[20];
+	
+	int tilesFound = 0;
+	
+	//Arays to handle branches in the FPGA paths
+	int pathBranches[200];
+	int branchPoint[200];
+	int branchIndex = 0;
 	
 	//Go backwards from round 1 S-Boxes until the BRAM is found
 	for(int i = 0; i < sBoxIndex; i++) {
@@ -1777,51 +1709,101 @@ int main (int argc, char *argv[]) {
 			for(int j = 0; j < 8; j++) {
 				
 				searching = 0;
+				branchIndex = 0;
+				tilesFound = 0;
 				
-				if((&finalSBoxes[i])->LUT8s[j].bitA == 0) {
+				if((&finalSBoxes[i])->LUT8s[j].bitA != 10) {
 					strcpy(searchTile, (&finalSBoxes[i])->LUT8s[j].name);
-					strcpy(searchName, "A6_LUTO6");
+					strcpy(searchName, "A6LUT_O6");
 					searching =1;
+					printTile((&finalSBoxes[i])->LUT8s[j]);
 				}
-				else if((&finalSBoxes[i])->LUT8s[j].bitE == 0) {
+				else if((&finalSBoxes[i])->LUT8s[j].bitE != 10) {
 					strcpy(searchTile, (&finalSBoxes[i])->LUT8s[j].name);
-					strcpy(searchName, "E6_LUTO6");
+					strcpy(searchName, "E6LUT_O6");
 					searching = 1;
+					printTile((&finalSBoxes[i])->LUT8s[j]);
 				}
 				
-				if(searching == 1) {
-					printf(searchName);
-					printf(" ");
-					printf(searchTile);
-					printf("\n");
+				while(searching == 1) {
+					
+					searching = 0;
+					
 					for(int k = connectionIndex; k >= 0; k--) {
 						
-						if(strcpy(searchTile, connections[k].endTile) == 0 && strcpy(searchName, connections[k].endName) == 0) {
+						if(strcmp(searchTile, connections[k].endTile) == 0 && strcmp(searchName, connections[k].endName) == 0) {
 						
-							testingTesting++;
-							printf("Count: %d\n", testingTesting);
-						
+							if(searching == 0) {
+								finalConnection = k;
+								strcpy(testSearchName, connections[k].beginName);
+								strcpy(testSearchTile, connections[k].beginTile);
+								searching = 1;
+								
+								//printConnection(connections[k]);
+								
+								memcpy(tileTest, connections[k].beginTile, 3);
+								tileTest[3] = 0;
+								
+								if(strcmp(tileTest, "CLE") == 0) {
+									
+									if(strcmp(lastTile, connections[k].beginTile) != 0) 
+										tilesFound++;
+									
+									strcpy(lastTile, connections[k].beginTile);
+								}
+							}
+							else {
+								pathBranches[branchIndex] = k;
+								branchIndex++;
+								
+								//printf("      ");
+								//printConnection(connections[k]);
+							}	
 						}
-				
+					}
+
+					if(searching == 1 && tilesFound <= 2) {
+						strcpy(searchName, testSearchName);
+						strcpy(searchTile, testSearchTile);
+					}
+					if(searching == 0 || tilesFound > 2) {
+						memcpy(testString, connections[finalConnection].endTile, 6);
+						testString[6] = 0;
 						
+						if(strcmp(testString, "INT_X8") == 0 && tilesFound <= 2) {
+							printConnection(connections[finalConnection]);
+							searching = 0;
+							break;
+						}
+						if(branchIndex > 0) {
+							//printf("----BRANCHING----\n");
+							
+							strcpy(searchTile, connections[pathBranches[--branchIndex]].beginTile);
+							strcpy(searchName, connections[pathBranches[branchIndex]].beginName);
+							tilesFound--;
+							searching = 1;
+						}
 					}
 					
-					j=8;
-	
-				
 				}
+				
+
+				//printf("----------------------------------------\n");
+				
 			}
+			printf("---------------------------------------------------------\n");
+			
 		}
 	}
 	
 	
 	int followingLUTindex = 0;
-	connectionFound = 1;
+	int connectionFound = 1;
 	char originalLUTs[16][30];
 
 	for(int i = 0; i < sBoxIndex; i++) {
 	
-		if(finalSBoxes[i].round == 2) {
+		if(finalSBoxes[i].round == 1) {
 		
 			for(int j = 0; j < 8; j++) {
 			
