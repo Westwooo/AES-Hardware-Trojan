@@ -18,6 +18,10 @@
 #define MAX_X 200
 #define MAX_Y 200
 
+#define BRAM 0
+#define LOGIC 1
+#define TILE 2
+
 //Variables representing inputs to LUT6s
 int I0, I1, I2, I3, I4, I5 = 0;
 int * inputs[6];
@@ -915,6 +919,36 @@ void generatePermutations(int *a, int l, int r) {
 
 int main (int argc, char *argv[]) {	
 	
+	//Open the connection dictionaries and copy into the relevent dictionary
+	char nextLine[30];
+	char bramConnectionDictionary[200][3][30];
+	
+	FILE *bramDictionary = fopen("../bramConnections.txt", "r"); 
+	FILE *logicDictionary = fopen("../formattedLogic.txt", "r"); 
+	FILE *tileDictionary = fopen("../formattedTiles.txt", "r"); 
+	int tileX, tileY;
+	int bramIndex = 0;
+	while(fgets(nextLine, 30, bramDictionary) != NULL) {
+		strcpy(bramConnectionDictionary[bramIndex][BRAM], nextLine);
+		fgets(nextLine, 30, logicDictionary);
+		strcpy(bramConnectionDictionary[bramIndex][LOGIC], nextLine);
+		bramConnectionDictionary[bramIndex][LOGIC][strlen(bramConnectionDictionary[bramIndex][LOGIC])-2] = 0;
+		fgets(nextLine, 30, tileDictionary);
+		strcpy(bramConnectionDictionary[bramIndex][TILE], nextLine);
+		bramIndex++;
+		/*
+		getTileCoords(nextLine, &tileX, &tileY);
+		printf("%d ", tileY % 5);
+		printf(nextLine);
+		*/
+	}
+	/*
+	for(int i = 0; i < bramIndex; i++) {
+		printf(bramConnectionDictionary[i][LOGIC]);
+		printf(" %d\n", strlen(bramConnectionDictionary[i][LOGIC]));
+	}
+	return 0;
+	*/
 
 	//Open the json file to be processed and check success
 	if(argc == 2) {
@@ -948,6 +982,38 @@ int main (int argc, char *argv[]) {
 			connectionIndex++;
 		}
 	}
+	
+	//TESTING
+	/*
+	char logicTest[11];
+	for(int i = 0; i < bramIndex; i++){
+		for(int j = 0; j < connectionIndex; j++) {
+			
+			if(strcmp(connections[j].beginName, bramConnectionDictionary[i][LOGIC]) == 0) {
+				if(strlen(connections[j].beginName) < 14)
+					printConnection(connections[j]);
+			}
+			
+			
+		}
+	}
+	return 0;
+	
+	for(int i = 0; i < connectionIndex; i++) {
+			
+		for(int j = 0; j < 10; j++) {
+			logicTest[j] = connections[i].beginName[j];
+		}
+		logicTest[10] = 0;
+		
+		if(strcmp(logicTest, "LOGIC_OUTS") == 0) {
+			for(int j = 0; j < bramIndex; j++) {
+				
+			}
+		}
+	}
+	*/
+	
 	
 	//Open the file to write found S-Boxes to 
 	FILE * foundThem = fopen("./FPGA_S-Boxes.txt", "w");
@@ -1716,14 +1782,19 @@ int main (int argc, char *argv[]) {
 					strcpy(searchTile, (&finalSBoxes[i])->LUT8s[j].name);
 					strcpy(searchName, "A6LUT_O6");
 					searching =1;
-					printTile((&finalSBoxes[i])->LUT8s[j]);
+					//TESTING
+					//printTile((&finalSBoxes[i])->LUT8s[j]);
 				}
 				else if((&finalSBoxes[i])->LUT8s[j].bitE != 10) {
 					strcpy(searchTile, (&finalSBoxes[i])->LUT8s[j].name);
 					strcpy(searchName, "E6LUT_O6");
 					searching = 1;
-					printTile((&finalSBoxes[i])->LUT8s[j]);
+					//TESTING
+					//printTile((&finalSBoxes[i])->LUT8s[j]);
 				}
+				
+				if(j == 0)
+					printTile((&finalSBoxes[i])->LUT8s[j]);
 				
 				while(searching == 1) {
 					
@@ -1739,6 +1810,7 @@ int main (int argc, char *argv[]) {
 								strcpy(testSearchTile, connections[k].beginTile);
 								searching = 1;
 								
+								//TESTING
 								//printConnection(connections[k]);
 								
 								memcpy(tileTest, connections[k].beginTile, 3);
@@ -1756,6 +1828,7 @@ int main (int argc, char *argv[]) {
 								pathBranches[branchIndex] = k;
 								branchIndex++;
 								
+								//TESTING
 								//printf("      ");
 								//printConnection(connections[k]);
 							}	
@@ -1771,11 +1844,13 @@ int main (int argc, char *argv[]) {
 						testString[6] = 0;
 						
 						if(strcmp(testString, "INT_X8") == 0 && tilesFound <= 2) {
-							printConnection(connections[finalConnection]);
+							//printConnection(connections[finalConnection]);
 							searching = 0;
 							break;
 						}
 						if(branchIndex > 0) {
+							
+							//TESTING
 							//printf("----BRANCHING----\n");
 							
 							strcpy(searchTile, connections[pathBranches[--branchIndex]].beginTile);
@@ -1785,6 +1860,27 @@ int main (int argc, char *argv[]) {
 						}
 					}
 					
+				}
+				
+				int tempX, tempY;
+				int testX, testY;
+				char tempTest[30];
+				char doubleTest[30];
+				
+				for(int k = 0; k < bramIndex; k++) {
+
+					if(strcmp(bramConnectionDictionary[k][LOGIC], connections[finalConnection].beginName) == 0) {
+						
+						
+						getTileCoords(connections[finalConnection].beginTile, &tempX, &tempY);
+						//printf("Temp: %d %d\n", tempX, tempY);
+						getTileCoords(bramConnectionDictionary[k][TILE], &testX, &testY);
+						//printf("Test: %d %d\n", testX, testY);
+						if(tempY % 5 == testY % 5) {
+							printf(bramConnectionDictionary[k][BRAM]);
+							break;
+						}
+					}
 				}
 				
 
