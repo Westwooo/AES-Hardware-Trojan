@@ -1793,6 +1793,9 @@ int main (int argc, char *argv[]) {
 	int twoIndex = 0;
 	int threeIndex = 0;
 	int fourIndex = 0;
+	double yAverages[4][4];
+	double yAverage = 0;
+	double foundCount = 0;
 	
 	//Go backwards from round 1 S-Boxes until the BRAM is found
 	for(int i = 0; i < sBoxIndex; i++) {
@@ -1800,6 +1803,8 @@ int main (int argc, char *argv[]) {
 		if(finalSBoxes[i].round == 1) {
 			
 			groupSet = 0;
+			yAverage = 0;
+			foundCount = 0;
 			
 			for(int j = 0; j < 8; j++) {
 				
@@ -1902,9 +1907,8 @@ int main (int argc, char *argv[]) {
 						
 						
 						getTileCoords(connections[finalConnection].beginTile, &tempX, &tempY);
-						//printf("Temp: %d %d\n", tempX, tempY);
 						getTileCoords(bramConnectionDictionary[k][TILE], &testX, &testY);
-						//printf("Test: %d %d\n", testX, testY);
+						
 						if(tempY % 5 == testY % 5) {
 							
 							for(int i = 0; i < strlen(bramConnectionDictionary[k][BRAM]); i++) {
@@ -1919,22 +1923,29 @@ int main (int argc, char *argv[]) {
 							}
 							bramNumber[numberEncountered-1] = 0;
 							printf(bramConnectionDictionary[k][BRAM]);
+							
+							foundCount++;
+							yAverage += tempY;
+							
 							break;
 						}
 					}
 				}
 				
-				if(groupSet == 0) {
+				if(j == 7) {
 					if(atoi(bramNumber) < 3) {
-						wordGroups[0][oneIndex++] = i;
+						wordGroups[0][oneIndex] = i;
+						yAverages[0][oneIndex++] = yAverage/foundCount;
 					} else if(atoi(bramNumber) < 7) {
-						wordGroups[1][twoIndex++] = i;
+						wordGroups[1][twoIndex] = i;
+						yAverages[1][twoIndex++] = yAverage/foundCount;
 					} else if(atoi(bramNumber) < 11) {
-						wordGroups[2][threeIndex++] = i;;
+						wordGroups[2][threeIndex] = i;
+						yAverages[2][threeIndex++] = yAverage/foundCount;
 					} else {
-						wordGroups[3][fourIndex++] = i;
+						wordGroups[3][fourIndex] = i;
+						yAverages[3][fourIndex++] = yAverage/foundCount;
 					}
-					groupSet = 1;
 				}				
 				
 
@@ -1949,17 +1960,18 @@ int main (int argc, char *argv[]) {
 	for(int i = 0; i < 4; i++) {
 		printf("GROUP %d: ", i+1);
 		for(int j = 0; j < 4; j++) {
-			printf("%d, ", wordGroups[i][j]);
+			printf("%d [%f], ", wordGroups[i][j], yAverages[i][j]);
 			//printSbox(finalSBoxes[wordGroups[i][j]]);
 		}
 		printf("\n");
 	}
-	return 0;
-	
 	
 	int followingLUTindex = 0;
 	int connectionFound = 1;
 	char originalLUTs[16][30];
+	
+	int associatedIndex[16];
+	
 
 	for(int i = 0; i < sBoxIndex; i++) {
 	
@@ -1970,11 +1982,13 @@ int main (int argc, char *argv[]) {
 				if((&finalSBoxes[i])->LUT8s[j].bitA == 1) {
 					printTile((&finalSBoxes[i])->LUT8s[j]);
 					strcpy(originalLUTs[sBoxUnderExamination], (&finalSBoxes[i])->LUT8s[j].name);
+					associatedIndex[sBoxUnderExamination] = i;
 					followingSBoxes((&finalSBoxes[i])->LUT8s[j].name, "A6LUT_O6");
 				}
 				else if((&finalSBoxes[i])->LUT8s[j].bitE == 1) {
 					printTile((&finalSBoxes[i])->LUT8s[j]);
 					strcpy(originalLUTs[sBoxUnderExamination], (&finalSBoxes[i])->LUT8s[j].name);
+					associatedIndex[sBoxUnderExamination] = i;
 					followingSBoxes((&finalSBoxes[i])->LUT8s[j].name, "E6LUT_O6");
 				}
 			}
@@ -1985,6 +1999,7 @@ int main (int argc, char *argv[]) {
 	int columnMembership[16];
 	int columnIndex = 0;
 	int row0, row1, row2, row3 = 0;
+	
 	
 	int existingColumn = 0;
 	int foundIndex = 0;
@@ -2000,18 +2015,13 @@ int main (int argc, char *argv[]) {
 		for(int j = 0; j < 5; j++) {
 		
 			for(int k = 0; k < columnIndex; k++) {
-			
-				for(int l = 0; l < 5; l++) {
-				
-					if(followingSBoxIndexes[i][0] == columns[k][j]) {
-						existingColumn = 1;
-						foundIndex = k;
-					}
-				
-				}
-			
-			}
 		
+				if(followingSBoxIndexes[i][0] == columns[k][j]) {
+					existingColumn = 1;
+					foundIndex = k;
+				}
+				
+			}
 		}
 		
 		if(existingColumn == 0) {
@@ -2019,15 +2029,124 @@ int main (int argc, char *argv[]) {
 				columns[columnIndex][j] = followingSBoxIndexes[i][j];
 			}
 			columnMembership[i] = columnIndex;
+			finalSBoxes[associatedIndex[i]].column = columnIndex;
 			columnIndex++;
 		}
-		else
+		else {
 			columnMembership[i] = foundIndex;
+			finalSBoxes[associatedIndex[i]].column = foundIndex;
+		}
 	}
 	
 	for(int i = 0; i < 16; i++) {
-		printf("%s ", originalLUTs[i]);
-		printf(" [%d]\n", columnMembership[i]);
+		printf("%d [%d]\n", associatedIndex[i], finalSBoxes[associatedIndex[i]].column);
+	}
+	
+	int bytes[4][4];
+	int isLowerHalf[4][4];
+	
+	int lessThan = 0;
+	
+	for(int i = 0; i < 4; i++) {
+
+		for(int j = 0; j < 4; j++) {
+			
+			lessThan = 0;
+			
+			
+			
+			for(int k = 0; k < 4; k++) {
+				if(j != k) {
+					if(yAverages[i][j] < yAverages[i][k])
+						lessThan++;
+				}
+			}
+
+			
+			if(lessThan >= 2)
+				isLowerHalf[i][j] = 0;
+			else
+				isLowerHalf[i][j] = 1;
+		}
+
+	}
+	
+	
+	
+	int sameColumnLower = 0;
+	int sameColumnUpper = 0;
+	
+	for(int groupIndex = 0; groupIndex < 3; groupIndex++) {
+		
+		sameColumnLower = 0;
+		sameColumnUpper = 0;
+		
+		for(int i = 0; i < 4; i++) {
+			if(isLowerHalf[groupIndex][i] == 1){
+				if(sameColumnLower == 1)
+					bytes[groupIndex][i] = groupIndex + 4;
+				else {
+					for(int j = 0; j < 4; j++) {
+						if(isLowerHalf[groupIndex+1][j] == 1){
+							if(finalSBoxes[wordGroups[groupIndex][i]].column == finalSBoxes[wordGroups[groupIndex+1][j]].column ) {
+								bytes[groupIndex][i] = groupIndex; //0;
+								sameColumnLower = 1;
+							}
+						}
+					}
+					if(sameColumnLower == 0)
+						bytes[groupIndex][i] = groupIndex + 4; //4;
+				}
+			}
+			else {
+				if(sameColumnUpper == 1)
+					bytes[groupIndex][i] = groupIndex + 12;
+				else {
+					for(int j = 0; j < 4; j++) {
+						if(isLowerHalf[groupIndex+1][j] == 0){
+							if(finalSBoxes[wordGroups[groupIndex][i]].column == finalSBoxes[wordGroups[groupIndex+1][j]].column ) {
+								bytes[groupIndex][i] = groupIndex + 8;
+								sameColumnUpper = 1;
+							}
+						}
+					}
+					if(sameColumnUpper == 0)
+						bytes[groupIndex][i] = groupIndex + 12;
+				}
+			}
+		}
+	}
+	
+	for(int i = 0; i < 4; i++) {
+		for(int j = 0; j < 4; j++) {
+			if(finalSBoxes[wordGroups[3][i]].column == finalSBoxes[wordGroups[0][j]].column) {
+				switch(bytes[0][j]) {
+				
+					case 0:
+						bytes[3][i] = 15;
+						break;
+					case 4:
+						bytes[3][i] = 3;
+						break;
+					case 8:
+						bytes[3][i] = 7;
+						break;
+					case 12:
+						bytes[3][i] = 11;
+						break;
+					
+						
+				}
+			}
+		}
+	}
+	
+	for(int i = 0; i < 4; i++) {
+		printf("GROUP %d: ", i+1); 
+		for(int j = 0; j < 4; j++) {
+			printf("%d [%d], ", wordGroups[i][j], bytes[i][j]);
+		}
+		printf("\n");
 	}
 	
 }

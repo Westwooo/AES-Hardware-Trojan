@@ -142,6 +142,7 @@ struct sBox{
 	struct sBox * previousSbox;
 	struct sBox * nextSbox;
 	int round;
+	int column;
 };
 
 	//Create and return a new sBox
@@ -160,6 +161,7 @@ struct sBox{
 		sBox.previousSbox = NULL;
 		sBox.nextSbox = NULL;
 		sBox.round = 0;
+		sBox.column = -1;
 		return sBox;
 	}
 	
