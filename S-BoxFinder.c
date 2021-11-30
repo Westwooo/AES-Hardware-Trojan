@@ -948,8 +948,28 @@ int main (int argc, char *argv[]) {
 		printf(" %d\n", strlen(bramConnectionDictionary[i][LOGIC]));
 	}
 	return 0;
+	
+	
+	//TESTING
+	char bramTest[30] = "BRAM_BRAM_CORE_2_DOBL10";
+	char bramNumber[3];
+	int numberEncountered = 0;
+	for(int i = 0; i < strlen(bramTest); i++) {
+		if(bramTest[i] < 65) {
+			if(numberEncountered != 0) {
+				bramNumber[numberEncountered-1] = bramTest[i];
+				numberEncountered++;
+			}
+			else 
+				numberEncountered = 1;
+		}
+	}
+	bramNumber[numberEncountered-1] = 0;
+	printf("%d\n", atoi(bramNumber));
+	
+	return 0;
 	*/
-
+	
 	//Open the json file to be processed and check success
 	if(argc == 2) {
 		char fileName[40] = "./";
@@ -1767,10 +1787,19 @@ int main (int argc, char *argv[]) {
 	int branchPoint[200];
 	int branchIndex = 0;
 	
+	int wordGroups[4][4];
+	int groupSet = 0;
+	int oneIndex = 0;
+	int twoIndex = 0;
+	int threeIndex = 0;
+	int fourIndex = 0;
+	
 	//Go backwards from round 1 S-Boxes until the BRAM is found
 	for(int i = 0; i < sBoxIndex; i++) {
 		
 		if(finalSBoxes[i].round == 1) {
+			
+			groupSet = 0;
 			
 			for(int j = 0; j < 8; j++) {
 				
@@ -1864,8 +1893,8 @@ int main (int argc, char *argv[]) {
 				
 				int tempX, tempY;
 				int testX, testY;
-				char tempTest[30];
-				char doubleTest[30];
+				char bramNumber[3];
+				int numberEncountered = 0;
 				
 				for(int k = 0; k < bramIndex; k++) {
 
@@ -1877,20 +1906,55 @@ int main (int argc, char *argv[]) {
 						getTileCoords(bramConnectionDictionary[k][TILE], &testX, &testY);
 						//printf("Test: %d %d\n", testX, testY);
 						if(tempY % 5 == testY % 5) {
+							
+							for(int i = 0; i < strlen(bramConnectionDictionary[k][BRAM]); i++) {
+								if(bramConnectionDictionary[k][BRAM][i] < 65) {
+									if(numberEncountered != 0) {
+										bramNumber[numberEncountered-1] = bramConnectionDictionary[k][BRAM][i];
+										numberEncountered++;
+									}
+									else 
+										numberEncountered = 1;
+								}
+							}
+							bramNumber[numberEncountered-1] = 0;
 							printf(bramConnectionDictionary[k][BRAM]);
 							break;
 						}
 					}
 				}
 				
+				if(groupSet == 0) {
+					if(atoi(bramNumber) < 3) {
+						wordGroups[0][oneIndex++] = i;
+					} else if(atoi(bramNumber) < 7) {
+						wordGroups[1][twoIndex++] = i;
+					} else if(atoi(bramNumber) < 11) {
+						wordGroups[2][threeIndex++] = i;;
+					} else {
+						wordGroups[3][fourIndex++] = i;
+					}
+					groupSet = 1;
+				}				
+				
 
 				//printf("----------------------------------------\n");
 				
 			}
-			printf("---------------------------------------------------------\n");
+			printf("-----------------------------------\n");
 			
 		}
 	}
+	
+	for(int i = 0; i < 4; i++) {
+		printf("GROUP %d: ", i+1);
+		for(int j = 0; j < 4; j++) {
+			printf("%d, ", wordGroups[i][j]);
+			//printSbox(finalSBoxes[wordGroups[i][j]]);
+		}
+		printf("\n");
+	}
+	return 0;
 	
 	
 	int followingLUTindex = 0;
