@@ -141,8 +141,10 @@ struct sBox{
 	int followingLUTs;
 	struct sBox * previousSbox;
 	struct sBox * nextSbox;
+	int nextIndex;
 	int round;
 	int column;
+	int byte;
 };
 
 	//Create and return a new sBox
@@ -162,6 +164,8 @@ struct sBox{
 		sBox.nextSbox = NULL;
 		sBox.round = 0;
 		sBox.column = -1;
+		sBox.byte = -1;
+		sBox.nextIndex = -1;
 		return sBox;
 	}
 	
