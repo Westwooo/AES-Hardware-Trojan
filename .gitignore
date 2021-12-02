@@ -1,0 +1,10 @@
+#JSON files
+*.json
+
+#exe files
+*.exe
+
+#Text files
+finalRoundLUTs.txt
+FPGA_S-Boxes.txt
+sortedS-Boxes.txt
