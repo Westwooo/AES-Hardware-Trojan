@@ -22,6 +22,8 @@
 #define LOGIC 1
 #define TILE 2
 
+#define BRANCHES 15
+
 //Variables representing inputs to LUT6s
 int I0, I1, I2, I3, I4, I5 = 0;
 int * inputs[6];
@@ -33,7 +35,7 @@ int length[32] = {};
 int zeros[32] = {};
 
 //INIT value of a LUT6 implemeting XOR, and array to store such LUTs
-char xorPattern[65] = {49,49,48,49,48,48,49,49,48,48,49,48,49,49,48,49,48,48,49,48,49,49,48,48,49,49,48,49,48,48,49,49,48,48,49,48,49,49,48,48,49,49,48,49,48,48,49,48,49,49,48,49,48,48,49,49,48,48,49,48,49,49,48};
+char xorPattern[65] = {48,49,49,48,49,48,48,49,49,48,48,49,48,49,49,48,49,48,48,49,48,49,49,48,48,49,49,48,49,48,48,49,49,48,48,49,48,49,49,48,48,49,49,48,49,48,48,49,48,49,49,48,49,48,48,49,49,48,48,49,48,49,49,48};
 char xorLUTs[1500][30];
 int xorIndex = 0;
 
@@ -64,23 +66,28 @@ int followingSBoxIndexes[16][5];
 int sBoxUnderExamination = 0;
 int foundFollowerIndex = 0;
 
-int testing = 1;
+int testing = 0;
+int searchDone = 0;
 
 char foundTile[20];
+char initialTile[30];
 
-void nextSBoxMark2(char tile[], char name[], int depth, int lutCount) {
+int nextLUT(char tile[], char name[], char foundNames[][30], char foundTiles[][30], int foundLUTs) {
 		
+	testing = 0;
+		
+	int lutFound = 0;
 	int newConnections = 1;
 	char searchName[30];
 	char searchTile[30];
 	char nextSearchName[30];
 	char nextSearchTile[30];
 	char lutTest[4];
-	struct connection * branchPoints[5][5];
+	struct connection * branchPoints[BRANCHES][5];
 	int branches = 0;
 	
 	//Initialise the branchPoints arrary
-	for(int i=0; i<5; i++) {
+	for(int i=0; i<BRANCHES; i++) {
 		for(int j=0; j<5; j++){
 			branchPoints[i][j] = NULL;
 		}
@@ -105,41 +112,34 @@ void nextSBoxMark2(char tile[], char name[], int depth, int lutCount) {
 				newConnections++;
 				
 				for(int i = 0; i < 3; i++) {
-					lutTest[i] = connections[cIndex].endName[i + 2];
+					lutTest[i] = connections[cIndex].endName[i+2];
 				}
 				lutTest[3] = 0;
-				//printf(lutTest);
-				
-				if(strcmp(lutTest, "LUT") == 0) {
-					//printConnection(connections[cIndex]);
-					
-					if(lutCount > 0 && strcmp(foundTile, connections[cIndex].endTile) != 0) {
-						
-						printf("HERE\n");
 
-						return;
-						
+			
+				if(strcmp(lutTest, "LUT") == 0 /*strcmp(initialTile, connections[cIndex].endTile) != 0*/) {
+					
+					if(testing == 1)
 						printConnection(connections[cIndex]);
-						
-						//TO DO - search the s-boxes and see if found LUT is part of an S-Box
-						//If so set the next s-box pointer as appropriate
-						//Else return 
-						
-					}
-					else {
-						strcpy(foundTile, connections[cIndex].endTile);
-						lutCount++;
-					}
 					
+					strcpy(foundNames[foundLUTs], connections[cIndex].endName);
+					strcpy(foundTiles[foundLUTs], connections[cIndex].endTile);
+					//printf("%d: %s (%s)\n", foundLUTs, foundNames[foundLUTs], foundTiles[foundLUTs]);
 					
+					lutFound = 1;
+					foundLUTs++;
+					cIndex = connectionIndex;
+					newConnections = 0;
+
 				}
 				
 				if(newConnections == 1) {
 					strcpy(nextSearchName, connections[cIndex].endName);
 					strcpy(nextSearchTile, connections[cIndex].endTile);
 				}
-				else {
+				else if (newConnections > 1) {
 					//A branch has been enountered, so safe other routes accordingly
+					//printf("HERE1\n");
 					branchPoints[branches][newConnections - 2] = &connections[cIndex];
 				}
 			}
@@ -160,22 +160,132 @@ void nextSBoxMark2(char tile[], char name[], int depth, int lutCount) {
 		
 	}//while
 	
-	if(depth > 0) {
-		for(int i = branches - 1; i >= 0; i--) {
-			for(int j = 0; j < 5; j++) {
-				if(branchPoints[i][j] != NULL) {
-					if(testing == 1) {
-						printf("				-----BRANCH DEPTH %d-----\n", depth);
-						printConnection(*branchPoints[i][j]);
-						printf("--------------------------------------------------------\n");
-					}
-					nextSBoxMark2(branchPoints[i][j]->endTile, branchPoints[i][j]->endName, depth - 1, lutCount);
+	for(int i = branches - 1; i >= 0; i--) {
+		for(int j = 0; j < 5; j++) {
+			if(branchPoints[i][j] != NULL) {
+				
+				if(testing == 1) {
+					printf("				-----BRANCH -----\n");
+					printConnection(*branchPoints[i][j]);
+					printf("--------------------------------------------------------\n");
 				}
+				foundLUTs = nextLUT(branchPoints[i][j]->endTile, branchPoints[i][j]->endName, foundNames, foundTiles, foundLUTs);
 			}
 		}
 	}
+	
+	
+	return foundLUTs;
 }
 
+int nextLUTorMUX(char tile[], char name[], char foundNames[][30], char foundTiles[][30], int foundLUTs) {
+		
+	testing = 0;
+		
+	int lutFound = 0;
+	int newConnections = 1;
+	char searchName[30];
+	char searchTile[30];
+	char nextSearchName[30];
+	char nextSearchTile[30];
+	char lutTest[4];
+	char muxTest[4];
+	struct connection * branchPoints[BRANCHES][5];
+	int branches = 0;
+	
+	//Initialise the branchPoints arrary
+	for(int i=0; i<BRANCHES; i++) {
+		for(int j=0; j<5; j++){
+			branchPoints[i][j] = NULL;
+		}
+	}
+	
+	strcpy(searchTile, tile); 
+	strcpy(searchName, name);
+	
+	while(newConnections > 0) {
+		
+		newConnections = 0;
+		
+		for(int cIndex = 0; cIndex < connectionIndex; cIndex++) {
+				
+			if(strcmp(searchTile, connections[cIndex].beginTile) == 0 && strcmp(searchName, connections[cIndex].beginName) == 0) {
+				
+				//TESTING
+				if(testing == 1) {
+					printConnection(connections[cIndex]);
+				}
+				
+				newConnections++;
+				
+				for(int i = 0; i < 3; i++) {
+					lutTest[i] = connections[cIndex].endName[i+2];
+					muxTest[i] = connections[cIndex].endName[i+2];
+				}
+				lutTest[3] = 0;
+				muxTest[3] = 0;
+				//printf(lutTest);
+			
+				if(strcmp(lutTest, "LUT") == 0 || (strcmp(muxTest, "MUX") == 0 && strcmp(initialTile, connections[cIndex].endTile) != 0)) {
+					
+					if(testing == 1)
+						printConnection(connections[cIndex]);
+					
+					strcpy(foundNames[foundLUTs], connections[cIndex].endName);
+					strcpy(foundTiles[foundLUTs], connections[cIndex].endTile);
+					//printf("%d: %s (%s)\n", foundLUTs, foundNames[foundLUTs], foundTiles[foundLUTs]);
+					
+					lutFound = 1;
+					foundLUTs++;
+					cIndex = connectionIndex;
+					newConnections = 0;
+
+				}
+				
+				if(newConnections == 1) {
+					strcpy(nextSearchName, connections[cIndex].endName);
+					strcpy(nextSearchTile, connections[cIndex].endTile);
+				}
+				else if (newConnections > 1) {
+					//A branch has been enountered, so safe other routes accordingly
+					//printf("HERE1\n");
+					branchPoints[branches][newConnections - 2] = &connections[cIndex];
+				}
+			}
+				
+		}//for
+		
+		if(newConnections > 1) {
+			branches++;
+		}
+		
+		//TESTING
+		if(testing == 1) {
+			printf("--------------------------------------------------------\n");
+		}
+		
+		strcpy(searchName, nextSearchName);
+		strcpy(searchTile, nextSearchTile);
+		
+	}//while
+	
+	for(int i = branches - 1; i >= 0; i--) {
+		for(int j = 0; j < 5; j++) {
+			if(branchPoints[i][j] != NULL) {
+				
+				if(testing == 1) {
+					printf("				-----BRANCH -----\n");
+					printConnection(*branchPoints[i][j]);
+					printf("--------------------------------------------------------\n");
+				}
+				foundLUTs = nextLUTorMUX(branchPoints[i][j]->endTile, branchPoints[i][j]->endName, foundNames, foundTiles, foundLUTs);
+			}
+		}
+	}
+	
+	
+	return foundLUTs;
+}
 
 //A method to find all LUTs immeadiately following a given LUT on a given TILE
 void followingLUTs(char tile[], char name[], char LUTNames[][30], char LUTTiles[][30],  int *followingIndex) {	
@@ -1045,58 +1155,8 @@ void generatePermutations(int *a, int l, int r) {
 	}
 }
 
+
 int main (int argc, char *argv[]) {	
-	
-	//Open the connection dictionaries and copy into the relevent dictionary
-	char nextLine[30];
-	char bramConnectionDictionary[200][3][30];
-	
-	FILE *bramDictionary = fopen("./bramConnections.txt", "r"); 
-	FILE *logicDictionary = fopen("./formattedLogic.txt", "r"); 
-	FILE *tileDictionary = fopen("./formattedTiles.txt", "r"); 
-	int tileX, tileY;
-	int bramIndex = 0;
-	while(fgets(nextLine, 30, bramDictionary) != NULL) {
-		strcpy(bramConnectionDictionary[bramIndex][BRAM], nextLine);
-		fgets(nextLine, 30, logicDictionary);
-		strcpy(bramConnectionDictionary[bramIndex][LOGIC], nextLine);
-		bramConnectionDictionary[bramIndex][LOGIC][strlen(bramConnectionDictionary[bramIndex][LOGIC])-2] = 0;
-		fgets(nextLine, 30, tileDictionary);
-		strcpy(bramConnectionDictionary[bramIndex][TILE], nextLine);
-		bramIndex++;
-		/*
-		getTileCoords(nextLine, &tileX, &tileY);
-		printf("%d ", tileY % 5);
-		printf(nextLine);
-		*/
-	}
-	/*
-	for(int i = 0; i < bramIndex; i++) {
-		printf(bramConnectionDictionary[i][LOGIC]);
-		printf(" %d\n", strlen(bramConnectionDictionary[i][LOGIC]));
-	}
-	return 0;
-	
-	
-	//TESTING
-	char bramTest[30] = "BRAM_BRAM_CORE_2_DOBL10";
-	char bramNumber[3];
-	int numberEncountered = 0;
-	for(int i = 0; i < strlen(bramTest); i++) {
-		if(bramTest[i] < 65) {
-			if(numberEncountered != 0) {
-				bramNumber[numberEncountered-1] = bramTest[i];
-				numberEncountered++;
-			}
-			else 
-				numberEncountered = 1;
-		}
-	}
-	bramNumber[numberEncountered-1] = 0;
-	printf("%d\n", atoi(bramNumber));
-	
-	return 0;
-	*/
 	
 	//Open the json file to be processed and check success
 	if(argc == 2) {
@@ -1111,7 +1171,7 @@ int main (int argc, char *argv[]) {
 		printf("Please supply a file path to be processed\n");
 		exit(EXIT_FAILURE);
 	}
-	
+
 	//Read all connections from JSON file and store in connections[]
 	while(strcmp(word, "LUT_VALUES") != 0) {
 		
@@ -1130,19 +1190,33 @@ int main (int argc, char *argv[]) {
 			connectionIndex++;
 		}
 	}
-
-	//TESTING
-	for(int i = 0 ; i < connectionIndex; i++) {
-		if(strcmp(connections[i].beginName, "F7MUX_GH_I0") == 0 && strcmp(connections[i].beginTile, "CLEL_R_X11Y110") == 0)
-			printConnection(connections[i]);
-		
+	
+	
+	
+	//Open the connection dictionaries and copy into the relevent dictionary
+	char nextLine[30];
+	char bramConnectionDictionary[200][3][30];
+	
+	FILE *bramDictionary = fopen("./bramConnections.txt", "r"); 
+	FILE *logicDictionary = fopen("./formattedLogic.txt", "r"); 
+	FILE *tileDictionary = fopen("./formattedTiles.txt", "r"); 
+	int tileX, tileY;
+	int bramIndex = 0;
+	while(fgets(nextLine, 30, bramDictionary) != NULL) {
+		strcpy(bramConnectionDictionary[bramIndex][BRAM], nextLine);
+		fgets(nextLine, 30, logicDictionary);
+		strcpy(bramConnectionDictionary[bramIndex][LOGIC], nextLine);
+		bramConnectionDictionary[bramIndex][LOGIC][strlen(bramConnectionDictionary[bramIndex][LOGIC])-2] = 0;
+		fgets(nextLine, 30, tileDictionary);
+		strcpy(bramConnectionDictionary[bramIndex][TILE], nextLine);
+		bramIndex++;
 	}
-	//return 0;
+	
 	
 	//Open the file to write found S-Boxes to 
 	FILE * foundThem = fopen("./FPGA_S-Boxes.txt", "w");
 
-	//Initialise relevant variables and generate all LUT INIT values
+	//Generate all possible LUT INIT values
 	inputs[0] = &I0;
 	inputs[1] = &I1;
 	inputs[2] = &I2;
@@ -1249,7 +1323,6 @@ int main (int argc, char *argv[]) {
 					tile[tempLength + 1] = 0;
 					strcpy(xorLUTs[xorIndex], tile);
 					tile[tempLength] = 0;
-					XORcount++;
 					xorIndex++;
 				}	
 				//Else check if S-Box LUT 
@@ -1424,6 +1497,8 @@ int main (int argc, char *argv[]) {
 	char connectionA[20] = "CLE_CLE_L_SITE_0_A";	//TO DO label variables
 	char connectionE[20] = "CLE_CLE_L_SITE_0_E";
 	
+	int doubleTesting = 0;
+	
 	//Sort tiles into the S-Boxes to which they belong
 	//TO DO - check that this is working correectly - if not fix
 	for (int index = 0; index < tileIndex; index++) {
@@ -1536,7 +1611,9 @@ int main (int argc, char *argv[]) {
 		fflush(stdout);	
 	}
 	
-	sBoxIndex--;
+	//sBoxIndex--;
+	
+	printSbox(sBoxes[199]);
 	
 	
 	
@@ -1560,6 +1637,7 @@ int main (int argc, char *argv[]) {
 		addTile(&sBoxes[incompleteSBox], unconnectedTile[i]);
 	}
 	
+	//TESTING
 	for(int i = 0; i < sBoxIndex; i++) {
 		if(sBoxes[i].foundLUT8s < 8) {
 			printf("/n%d\n", i);
@@ -1580,7 +1658,7 @@ int main (int argc, char *argv[]) {
 	fflush(stdout);	
 	printf("\n\n\n");
 	
-	return 0;
+	//return 0;
 	
 
 	char LUTletter;
@@ -1608,42 +1686,7 @@ int main (int argc, char *argv[]) {
 	printf("-------------------------\n");
 	
 	int noFollowerCount = 0;
-	testing = 1;
-	
-	//---------------------------------------
-	for(int sbIndex = 0; sbIndex < sBoxCount; sbIndex++){
-
-		if(finalSBoxes[sbIndex].LUT8s[0].LUT6s[0] == 1) {
-			strcpy(searchName, "FFMUXC1_OUT1");
-		}
-		else {
-			strcpy(searchName, "FFMUXG1_OUT1");
-		}
-		
-		
-		
-	}
-	
-	for(int sbIndex = 196; sbIndex < 197; sbIndex++) {
-			
-		for(int lutIndex = 0; lutIndex < 1; lutIndex++) {
-			
-			if(finalSBoxes[sbIndex].LUT8s[lutIndex].LUT6s[0] == 1) {
-					nextSBoxMark2(finalSBoxes[sbIndex].LUT8s[lutIndex].name, "FFMUXC1_OUT1", 1, 0);
-				}
-				else {
-					nextSBoxMark2(finalSBoxes[sbIndex].LUT8s[lutIndex].name, "FFMUXG1_OUT1", 1, 0);
-				}
-			
-			
-			
-		}
-			
-	}
-	
-	return 0; 
-	
-	
+	testing = 0;
 	
 	//Go through rooting info to find each S-Boxes proceeding S-Box
 	for(int sbIndex = 0; sbIndex < sBoxCount; sbIndex++) {
@@ -1842,47 +1885,20 @@ int main (int argc, char *argv[]) {
 	printf("\rProgress: %d/%d", tileIndex/8, tileIndex/8);
 	fflush(stdout);
 	
-
-	
 	int finalRoundSBoxes[16];
 	int finalIndex = 0;
 	int count = 0;
-	/*
-	FILE * roundSBoxes = fopen("sortedS-Boxes.txt", "w");
-	fputs("FINAL ROUND:", roundSBoxes);
-	fputc(10, roundSBoxes);
-	fputs("----------------------", roundSBoxes);
-	fputc(10, roundSBoxes);
-	*/
-	
-	//TESTING
-	for(int i = 0; i < sBoxIndex; i++) {
-		if(i == 5||i == 44||i == 170) {
-			printf("\n%d:\n", i);
-			printf("-----------------------------\n");
-			printf("NEXT:\n");
-			if(finalSBoxes[i].nextSbox != NULL)
-				printSbox(*finalSBoxes[i].nextSbox);
-			printf("PREVIOUS\n");
-			if(finalSBoxes[i].previousSbox != NULL)
-				printSbox(*finalSBoxes[i].previousSbox);
-		}
-	}
 	
 	//If a S-Box has no following S-Boxes then it must belong in the final round
 	//TODO: for ever final roudn S-Box LUT8 find the closest unused LUT4 and detnote 
 	for(int i = 0; i < sBoxIndex; i++) {
 		if(finalSBoxes[i].followingLUTs == 0 && finalSBoxes[i].previousSbox != NULL) {
-			
 			finalRoundSBoxes[finalIndex] = i;
 			finalIndex++;
-			//fputSbox(finalSBoxes[i], i, roundSBoxes);
 			finalSBoxes[i].round = 10;
 			count++;
 		}
 	}
-	
-	printf("\nS-Boxes per round: %d\n", count);
 	
 	int testingRoundCount = 0;
 	
@@ -1891,20 +1907,12 @@ int main (int argc, char *argv[]) {
 		
 		testingRoundCount = 0;
 		
-		/*
-		fputs("ROUND ", roundSBoxes);
-		fputc(rounds + 48, roundSBoxes);
-		fputc(10, roundSBoxes);
-		fputs("----------------------", roundSBoxes);
-		fputc(10, roundSBoxes);
-		*/
 		for(int i = 0; i < sBoxIndex; i++) {
 	
 			if(finalSBoxes[i].nextSbox != NULL) {
 				if(finalSBoxes[i].nextSbox->round == rounds + 1) {
 					finalSBoxes[i].round = rounds;
 					testingRoundCount++;
-					//fputSbox(finalSBoxes[i], i, roundSBoxes);
 				}
 			}
 		}
@@ -1913,24 +1921,192 @@ int main (int argc, char *argv[]) {
 	}	
 	
 	
+	//TESTING
+	int followTest = 0;
+	int foundLUTs = 0;
+	char followingNames[7][30];
+	char followingTiles[7][30];
 	
-	//TESTING 
-	return 0;
+	int tempIndex = 0;
+	char sBoxNamesFollowing[60][30];
+	char sBoxTilesFollowing[60][30];
+	testing = 0;
 	
-	count = 0;
+	for(int i = 0; i < sBoxIndex; i++) {
+	//	if(i == 196 || i == 7 || i == 80 || i == 17 || i ==50||i==89||i==111||i==55||i==63||i==145||i==133) {
+		for(int j = 0; j < 8; j++) {
+			
+			if(finalSBoxes[i].round > 0 && finalSBoxes[i].round < 10) {
+				
+				foundLUTs = 0;
+				tempIndex = 0;
+				
+				if(finalSBoxes[i].LUT8s[j].LUT6s[0] == 1 && finalSBoxes[i].LUT8s[j].bitA == 7) {
+					
+					followTest = nextLUT(finalSBoxes[i].LUT8s[j].name, "FFMUXC1_OUT1", followingNames, followingTiles, foundLUTs);
+					
+					if(testing == 1) {
+						printTile(finalSBoxes[i].LUT8s[j]);
+					}
+					
+					for(int k = 0; k < followTest; k++) {
+						
+						if(followingNames[k][2] == 76) {
+							followingNames[k][1] = 54;
+							followingNames[k][7] = 54;
+						}
+						
+						if(testing == 1) {
+							printf("     %s (%s)\n ", followingNames[k], followingTiles[k]);
+						}
+						
+						strcpy(initialTile, followingTiles[k]);
+						
+						tempIndex = nextLUTorMUX(followingTiles[k], followingNames[k], sBoxNamesFollowing, sBoxTilesFollowing, 0);
+						for(int l = 0; l < tempIndex; l++) {
+							
+							if(testing == 1) {
+								printf("              %s (%s) ", sBoxNamesFollowing[l], sBoxTilesFollowing[l]);
+							}
+							
+							for(int m = 0; m < sBoxIndex; m++) {
+								for(int n = 0; n < 8; n++) {
+									if(strcmp(finalSBoxes[m].LUT8s[n].name, sBoxTilesFollowing[l]) == 0) {
+										if((finalSBoxes[m].LUT8s[n].LUT6s[0] == 1 && sBoxNamesFollowing[l][0] < 69) ||
+										   (finalSBoxes[m].LUT8s[n].LUT6s[0] == 1 && sBoxNamesFollowing[l][6] == 66)) {
+											   
+											if(testing == 1)
+												printf("%d, ", m);
+											
+											
+											if(finalSBoxes[i].followingSBoxes[k] == m) {
+												m = sBoxIndex; 
+												n = 8;
+												l = tempIndex;
+											}
+											else
+												finalSBoxes[i].followingSBoxes[k] = m;
+											
+										}
+										else if((finalSBoxes[m].LUT8s[n].LUT6s[7] == 1 && sBoxNamesFollowing[l][0] > 68) ||
+										   (finalSBoxes[m].LUT8s[n].LUT6s[0] == 1 && sBoxNamesFollowing[l][6] == 84)) {
+											
+											if(testing == 1)
+												printf("%d, ", m);
+											
+											
+											if(finalSBoxes[i].followingSBoxes[k] == m) {
+												m = sBoxIndex; 
+												n = 8;
+												l = tempIndex;
+											}
+											else
+												finalSBoxes[i].followingSBoxes[k] = m;
+											
+										}
+									}
+								}
+							}
+							if(testing == 1)
+								printf("\n");
+						}
+					}
+					if(testing == 1)
+						printf("\n");
+				}
+				else if(finalSBoxes[i].LUT8s[j].LUT6s[7] == 1 && finalSBoxes[i].LUT8s[j].bitE == 7) {
+					
+					if(testing == 1)
+						printTile(finalSBoxes[i].LUT8s[j]);
+					
+					followTest = nextLUT(finalSBoxes[i].LUT8s[j].name, "FFMUXG1_OUT1", followingNames, followingTiles, foundLUTs);
+					
+					//printf("HERE");
+					//printf("%d\n", followTest);
+					
+					for(int k = 0; k < followTest; k++) {
+						if(followingNames[k][2] == 76) {
+							followingNames[k][1] = 54;
+							followingNames[k][7] = 54;
+						}
+						
+						if(testing == 1)
+							printf("     %s (%s)\n ", followingNames[k], followingTiles[k]);
+						
+						strcpy(initialTile, followingTiles[k]);
+						
+						tempIndex = nextLUTorMUX(followingTiles[k], followingNames[k], sBoxNamesFollowing, sBoxTilesFollowing, 0);
+						for(int l = 0; l < tempIndex; l++) {
+							
+							if(testing == 1)
+								printf("              %s (%s) ", sBoxNamesFollowing[l], sBoxTilesFollowing[l]);
+							
+							for(int m = 0; m < sBoxIndex; m++) {
+								for(int n = 0; n < 8; n++) {
+									if(strcmp(finalSBoxes[m].LUT8s[n].name, sBoxTilesFollowing[l]) == 0) {
+										if((finalSBoxes[m].LUT8s[n].LUT6s[0] == 1 && sBoxNamesFollowing[l][0] < 69) ||
+										   (finalSBoxes[m].LUT8s[n].LUT6s[0] == 1 && sBoxNamesFollowing[l][6] == 66)) {
+											
+											if(testing == 1)
+												printf("%d, ", m);
+											
+											if(finalSBoxes[i].followingSBoxes[k] == m) {
+												m = sBoxIndex; 
+												n = 8;
+												l = tempIndex;
+											}
+											else		
+												finalSBoxes[i].followingSBoxes[k] = m;
+										}
+										else if((finalSBoxes[m].LUT8s[n].LUT6s[7] == 1 && sBoxNamesFollowing[l][0] > 68) ||
+												(finalSBoxes[m].LUT8s[n].LUT6s[7] == 1 && sBoxNamesFollowing[l][6] == 84)) {
+											
+											if(testing == 1)
+												printf("%d, ", m);
+											
+											
+											if(finalSBoxes[i].followingSBoxes[k] == m) {
+												m = sBoxIndex; 
+												n = 8;
+												l = tempIndex;
+											}
+											else
+												finalSBoxes[i].followingSBoxes[k] = m;
+											
+										}
+									}
+								}
+							}
+							if(testing == 1)
+								printf("\n");
+						}
+					}
+					if(testing == 1)
+						printf("\n");
+				}
+			
+			}
+			
+		}
+		//}//if
+		printf("\rProgress: %d / 160", i);
+		fflush(stdout);
+	}
+	printf("\rProgress: 160 / 160");
+	fflush(stdout);
 	
-	//Any remaining S-Boxes must be used for key generation
-	/*
-	fputs("KEY S-BOXES:", roundSBoxes);
-	fputc(10, roundSBoxes);
-	fputs("----------------------", roundSBoxes);
-	*/
-	for(int i = 0; i < sBoxCount; i++) {
-		if(finalSBoxes[i].nextSbox == NULL && finalSBoxes[i].previousSbox == NULL) {
-			//fputSbox(finalSBoxes[i], i, roundSBoxes);
-			count++;
+	for(int i = 0; i < sBoxIndex; i++) {
+		if(finalSBoxes[i].round > 0 && finalSBoxes[i].round < 10) {
+			for(int j = 0; j < 5; j++) {
+				for(int k = 0; k < 5; k++) {
+					if((finalSBoxes[i].followingSBoxes[j] == finalSBoxes[i].followingSBoxes[k]) && j != k)
+						finalSBoxes[i].nextIndex = finalSBoxes[i].followingSBoxes[j];
+				}
+			}
 		}
 	}
+	
+	printf("HERE2/n");
 	
 	printf("\n\n");
 	printf("S-Boxes used in key generation: %d\n", count);
@@ -1987,40 +2163,66 @@ int main (int argc, char *argv[]) {
 	double yAverage = 0;
 	double foundCount = 0;
 	
+	int lowerIndexes[4] = {0, 0, 0, 0};
+	int upperIndexes[4] = {2, 2, 2, 2};
+	
+	testing = 0;
+	
+	printf("HERE\n");
+	
 	//Go backwards from round 1 S-Boxes until the BRAM is found
+	//Go through each round one S-Box and choose one LUT, as LUTs all recieve same input
+	//Follow the connection back as far as possible
+	//Then use BRAM dictionary to identify BRAM bus - ADDR...
+	//The number can be used to split the bytes into four groups: 
+	//		- {0,4,8,12}, {1,5,9,13}, {2,6,10,14}, {3,7,11,15}
+	//Further we can distinguish between the forst ans second halves of each of these groups 
+	//Since bytes 0-7, are connected to a different BRAM from bytes 8-15
+	//TO DO - HOW TO DISTINGUISH BETWEEN FIRST AND SECOND HALVES OF THE STATE
 	for(int i = 0; i < sBoxIndex; i++) {
-		
 		if(finalSBoxes[i].round == 1) {
 			
-			groupSet = 0;
-			yAverage = 0;
-			foundCount = 0;
+			//TESTING
+			printf("S BOX INDEX: %d\n, ", i);
+			printTile(finalSBoxes[i].LUT8s[0]);
 			
-			for(int j = 0; j < 8; j++) {
+			for(int temp = 0; temp < 5; temp++) {
+				printf("%d, ", finalSBoxes[i].followingSBoxes[temp]);
+			}
+			printf("\n");
 				
-				searching = 0;
+			for(int j = 0; j < 6; j++) {
+				
+				searching = 1;
+				groupSet = 0;
+				yAverage = 0;
+				foundCount = 0;
 				branchIndex = 0;
 				tilesFound = 0;
 				
+				strcpy(searchTile, (&finalSBoxes[i])->LUT8s[0].name);
+				
 				if((&finalSBoxes[i])->LUT8s[j].bitA != 10) {
-					strcpy(searchTile, (&finalSBoxes[i])->LUT8s[j].name);
-					strcpy(searchName, "A6LUT_O6");
-					searching =1;
-					//TESTING
-					//printTile((&finalSBoxes[i])->LUT8s[j]);
+					
+					if(searchTile[3] == 77)
+						strcpy(searchName, "CLE_CLE_M_SITE_0_A1");
+					else
+						strcpy(searchName, "CLE_CLE_L_SITE_0_A1");
+					
 				}
 				else if((&finalSBoxes[i])->LUT8s[j].bitE != 10) {
-					strcpy(searchTile, (&finalSBoxes[i])->LUT8s[j].name);
-					strcpy(searchName, "E6LUT_O6");
-					searching = 1;
-					//TESTING
-					//printTile((&finalSBoxes[i])->LUT8s[j]);
+					
+					if(searchTile[3] == 77)
+						strcpy(searchName, "CLE_CLE_M_SITE_0_E1");
+					else
+						strcpy(searchName, "CLE_CLE_L_SITE_0_E1");
 				}
 				
-				/*
-				if(j == 0)
-					printTile((&finalSBoxes[i])->LUT8s[j]);
-				*/
+				searchName[strlen(searchName)-1] = searchName[strlen(searchName)-1] + j;
+				//TESTING
+				printf(searchName);
+				printf("\n");
+
 				
 				while(searching == 1) {
 					
@@ -2037,7 +2239,8 @@ int main (int argc, char *argv[]) {
 								searching = 1;
 								
 								//TESTING
-								//printConnection(connections[k]);
+								if(testing ==1)
+									printConnection(connections[k]);
 								
 								memcpy(tileTest, connections[k].beginTile, 3);
 								tileTest[3] = 0;
@@ -2055,8 +2258,8 @@ int main (int argc, char *argv[]) {
 								branchIndex++;
 								
 								//TESTING
-								//printf("      ");
-								//printConnection(connections[k]);
+								printf("      ");
+								printConnection(connections[k]);
 							}	
 						}
 					}
@@ -2069,8 +2272,8 @@ int main (int argc, char *argv[]) {
 						memcpy(testString, connections[finalConnection].endTile, 6);
 						testString[6] = 0;
 						
-						if(strcmp(testString, "INT_X8") == 0 && tilesFound <= 2) {
-							//printConnection(connections[finalConnection]);
+						if((strcmp(testString, "INT_X8") == 0 || strcmp(testString, "INT_X2") == 0) && tilesFound <= 2) {
+							printConnection(connections[finalConnection]);
 							searching = 0;
 							break;
 						}
@@ -2087,6 +2290,7 @@ int main (int argc, char *argv[]) {
 					}
 					
 				}
+				
 				
 				int tempX, tempY;
 				int testX, testY;
@@ -2116,7 +2320,11 @@ int main (int argc, char *argv[]) {
 							bramNumber[numberEncountered-1] = 0;
 							
 							//TESTING
-							//printf(bramConnectionDictionary[k][BRAM]);
+							printf("      ");
+							printf(bramConnectionDictionary[k][BRAM]);
+							printf("%d\n", atoi(bramNumber));
+							
+							j = 5;
 							
 							foundCount++;
 							yAverage += tempY;
@@ -2126,240 +2334,177 @@ int main (int argc, char *argv[]) {
 					}
 				}
 				
-				if(j == 7) {
-					if(atoi(bramNumber) < 3) {
-						wordGroups[0][oneIndex] = i;
-						yAverages[0][oneIndex++] = yAverage/foundCount;
-					} else if(atoi(bramNumber) < 7) {
-						wordGroups[1][twoIndex] = i;
-						yAverages[1][twoIndex++] = yAverage/foundCount;
-					} else if(atoi(bramNumber) < 11) {
-						wordGroups[2][threeIndex] = i;
-						yAverages[2][threeIndex++] = yAverage/foundCount;
-					} else {
-						wordGroups[3][fourIndex] = i;
-						yAverages[3][fourIndex++] = yAverage/foundCount;
+				
+				
+				if(j == 5) {
+					if(tempX == 8) {
+						if(atoi(bramNumber) < 3) {
+							wordGroups[0][lowerIndexes[0]] = i;
+							lowerIndexes[0]++;
+						} else if(atoi(bramNumber) < 7) {
+							wordGroups[1][lowerIndexes[1]] = i;
+							lowerIndexes[1]++;
+						} else if(atoi(bramNumber) < 11) {
+							wordGroups[2][lowerIndexes[2]] = i;
+							lowerIndexes[2]++;
+						} else {
+							wordGroups[3][lowerIndexes[3]] = i;
+							lowerIndexes[3]++;
+						}
 					}
-				}				
-				
-
-				//printf("----------------------------------------\n");
-				
+					else {
+						if(atoi(bramNumber) < 3) {
+							wordGroups[0][upperIndexes[0]] = i;
+							upperIndexes[0]++;
+						} else if(atoi(bramNumber) < 7) {
+							wordGroups[1][upperIndexes[1]] = i;
+							upperIndexes[1]++;
+						} else if(atoi(bramNumber) < 11) {
+							wordGroups[2][upperIndexes[2]] = i;
+							upperIndexes[2]++;
+						} else {
+							wordGroups[3][upperIndexes[3]] = i;
+							upperIndexes[3]++;
+						}
+					}
+					
+					printf("%d\n", tempX);
+				}
 			}
 			
-			//TESTING
-			//printf("-----------------------------------\n");
+			printf("---------------------------------\n");
 			
 		}
 	}
 	
-	
 	//TESTING
-	/*
 	for(int i = 0; i < 4; i++) {
-		printf("GROUP %d: ", i+1);
 		for(int j = 0; j < 4; j++) {
-			printf("%d [%f], ", wordGroups[i][j], yAverages[i][j]);
-			//printSbox(finalSBoxes[wordGroups[i][j]]);
+			printf("%d, ", wordGroups[i][j]);
 		}
 		printf("\n");
 	}
-	*/
-	
-	int followingLUTindex = 0;
-	int connectionFound = 1;
-	char originalLUTs[16][30];
-	
-	int associatedIndex[16];
-	
-	printf("FOLLOWING ROUND 1:\n");
 
-	for(int i = 0; i < sBoxIndex; i++) {
-	
-		if(finalSBoxes[i].round == 1) {
-		
-			for(int j = 0; j < 8; j++) {
-			
-				if((&finalSBoxes[i])->LUT8s[j].bitA == 1) {
-					//TESTING
-					//printTile((&finalSBoxes[i])->LUT8s[j]);
-					strcpy(originalLUTs[sBoxUnderExamination], (&finalSBoxes[i])->LUT8s[j].name);
-					associatedIndex[sBoxUnderExamination] = i;
-					followingSBoxes((&finalSBoxes[i])->LUT8s[j].name, "A6LUT_O6");
-				}
-				else if((&finalSBoxes[i])->LUT8s[j].bitE == 1) {
-					//TESTING
-					//printTile((&finalSBoxes[i])->LUT8s[j]);
-					strcpy(originalLUTs[sBoxUnderExamination], (&finalSBoxes[i])->LUT8s[j].name);
-					associatedIndex[sBoxUnderExamination] = i;
-					followingSBoxes((&finalSBoxes[i])->LUT8s[j].name, "E6LUT_O6");
-				}
-			}
-		}
-	}
-	/*
-	for(int i = 0; i < 5; i++) {
-		printf(" %d, ", followingSBoxIndexes[sBoxUnderExamination][i]);
-	}
-	*/
-	
-	for(int i = 0; i < 16; i++) {
-		for(int j = 0; j < 5; j++) {
-			for(int k = 0; k < 5; k++) {
-				
-				if(followingSBoxIndexes[i][j] == followingSBoxIndexes[i][k] && j != k) {
-					finalSBoxes[associatedIndex[i]].nextIndex = followingSBoxIndexes[i][j];
-				}
-			
-			}
-		}
-	}
-	
-	int columns[4][5];
-	int columnMembership[16];
-	int columnIndex = 0;
-	int row0, row1, row2, row3 = 0;
-	
-	
-	int existingColumn = 0;
-	int foundIndex = 0;
-	
-	//printf("\n --------------------------------------------\n");
-	
-	//For all S-Boxes in the round
-	for(int i = 0; i < 16; i++) {
-	
-		existingColumn = 0;
-	
-		//For all followingSBoxIndexes
-		for(int j = 0; j < 5; j++) {
-		
-			for(int k = 0; k < columnIndex; k++) {
-		
-				if(followingSBoxIndexes[i][0] == columns[k][j]) {
-					existingColumn = 1;
-					foundIndex = k;
-				}
-				
-			}
-		}
-		
-		if(existingColumn == 0) {
-			for(int j = 0; j < 5; j++) {
-				columns[columnIndex][j] = followingSBoxIndexes[i][j];
-			}
-			columnMembership[i] = columnIndex;
-			finalSBoxes[associatedIndex[i]].column = columnIndex;
-			columnIndex++;
-		}
-		else {
-			columnMembership[i] = foundIndex;
-			finalSBoxes[associatedIndex[i]].column = foundIndex;
-		}
-	}
-	
+	//Use the column membership and information from BRAM to label the first round bytes
+	//We cand split the bytes into four other groups using the following S-Box indexes:
+	//		- {0,5,10,15}, {1,6,11,12}, {2,7,8,13}, {3,4,9,14}
+	//However these groups cannot be distinguished between 
+	//From the previous step we have 2 bytes which are either 0 or 4
+	//We can distinguish between these two bytes as follows:
+	//We have two groups identified in the previous section:
+	//		- 1: {0,4,8,12} and 2: {1,5,9,13}
+	//We have then split these further into:
+	//		- 1a: {0,4}, 1b{8,12} and 2a: {1,5}, 2b: {9,13}
+	//Select a byte from group 1a and check if it's in the same column as either byte from 2a
+	//If so the byte selected from group 1a is byte 0, else the selected byte is byte 4
+	//Now we can label the two bytes 0 and 4 and label those in the same column
+	//The process is repeated with groups 1b and 2b, resulting in all bytes being labelled
 	int bytes[4][4];
-	int isLowerHalf[4][4];
+	int isZero = 0;
 	
-	int lessThan = 0;
-	
-	for(int i = 0; i < 4; i++) {
-
-		for(int j = 0; j < 4; j++) {
-			
-			lessThan = 0;
-			
-			
-			
-			for(int k = 0; k < 4; k++) {
-				if(j != k) {
-					if(yAverages[i][j] < yAverages[i][k])
-						lessThan++;
-				}
-			}
-
-			
-			if(lessThan >= 2)
-				isLowerHalf[i][j] = 0;
-			else
-				isLowerHalf[i][j] = 1;
-		}
-
-	}
-	
-	
-	
-	int sameColumnLower = 0;
-	int sameColumnUpper = 0;
-	
-	for(int groupIndex = 0; groupIndex < 3; groupIndex++) {
-		
-		sameColumnLower = 0;
-		sameColumnUpper = 0;
-		
-		for(int i = 0; i < 4; i++) {
-			if(isLowerHalf[groupIndex][i] == 1){
-				if(sameColumnLower == 1)
-					bytes[groupIndex][i] = groupIndex + 4;
-				else {
-					for(int j = 0; j < 4; j++) {
-						if(isLowerHalf[groupIndex+1][j] == 1){
-							if(finalSBoxes[wordGroups[groupIndex][i]].column == finalSBoxes[wordGroups[groupIndex+1][j]].column ) {
-								bytes[groupIndex][i] = groupIndex; //0;
-								sameColumnLower = 1;
-							}
-						}
-					}
-					if(sameColumnLower == 0)
-						bytes[groupIndex][i] = groupIndex + 4; //4;
-				}
-			}
-			else {
-				if(sameColumnUpper == 1)
-					bytes[groupIndex][i] = groupIndex + 12;
-				else {
-					for(int j = 0; j < 4; j++) {
-						if(isLowerHalf[groupIndex+1][j] == 0){
-							if(finalSBoxes[wordGroups[groupIndex][i]].column == finalSBoxes[wordGroups[groupIndex+1][j]].column ) {
-								bytes[groupIndex][i] = groupIndex + 8;
-								sameColumnUpper = 1;
-							}
-						}
-					}
-					if(sameColumnUpper == 0)
-						bytes[groupIndex][i] = groupIndex + 12;
-				}
-			}
+	for(int i = 0; i < 5; i++) {
+		if(finalSBoxes[wordGroups[0][0]].followingSBoxes[0] == finalSBoxes[wordGroups[1][0]].followingSBoxes[i] || finalSBoxes[wordGroups[0][0]].followingSBoxes[0] == finalSBoxes[wordGroups[1][1]].followingSBoxes[i]) {
+			printf("HERE\n");
+			isZero = 1;
 		}
 	}
 	
-	for(int i = 0; i < 4; i++) {
-		for(int j = 0; j < 4; j++) {
-			if(finalSBoxes[wordGroups[3][i]].column == finalSBoxes[wordGroups[0][j]].column) {
-				switch(bytes[0][j]) {
-				
-					case 0:
-						bytes[3][i] = 15;
-						break;
-					case 4:
-						bytes[3][i] = 3;
-						break;
-					case 8:
-						bytes[3][i] = 7;
-						break;
-					case 12:
-						bytes[3][i] = 11;
-						break;
+	if(isZero == 1) {
+		bytes[0][0] = 0;
+		bytes[0][1] = 4;
+	}
+	else {
+		bytes[0][0] = 4;
+		bytes[0][1] = 0;
+	}
+	
+	for(int idIndex = 0; idIndex < 2; idIndex++) {
+		for(int i = 1; i < 4; i++) {
+			for(int j = 0; j < 4; j++) {
+				for(int k = 0; k < 5; k++) {
+					if(finalSBoxes[wordGroups[0][idIndex]].followingSBoxes[0] == finalSBoxes[wordGroups[i][j]].followingSBoxes[k]) {
 					
-						
+						if(bytes[0][idIndex] == 0) {
+							
+							bytes[i][j] = 5*i;
+						}
+						else {
+							switch(i) {
+								case 1:
+									bytes[i][j] = 9;
+									break;
+								case 2:
+									bytes[i][j] = 14;
+									break;
+								case 3:
+									bytes[i][j] = 3;
+									break;
+							}
+						}	
+					}
 				}
 			}
 		}
 	}
 	
-	//TESTING
+	int isEight = 0; 
+	
+	for(int i = 0; i < 5; i++) {
+		if(finalSBoxes[wordGroups[0][2]].followingSBoxes[0] == finalSBoxes[wordGroups[1][2]].followingSBoxes[i] || finalSBoxes[wordGroups[0][2]].followingSBoxes[0] == finalSBoxes[wordGroups[1][3]].followingSBoxes[i]) {
+			printf("HERE\n");
+			isEight = 1;
+		}
+	}
+	
+	if(isEight == 1) {
+		bytes[0][2] = 8;
+		bytes[0][3] = 12;
+	}
+	else {
+		bytes[0][2] = 12;
+		bytes[0][3] = 8;
+	}
+	
+	for(int idIndex = 2; idIndex < 4; idIndex++) {
+		for(int i = 1; i < 4; i++) {
+			for(int j = 0; j < 4; j++) {
+				for(int k = 0; k < 5; k++) {
+					if(finalSBoxes[wordGroups[0][idIndex]].followingSBoxes[0] == finalSBoxes[wordGroups[i][j]].followingSBoxes[k]) {
+					
+						if(bytes[0][idIndex] == 8) {
+							switch(i) {
+								case 1:
+									bytes[i][j] = 13;
+									break;
+								case 2:
+									bytes[i][j] = 2;
+									break;
+								case 3:
+									bytes[i][j] = 7;
+									break;
+							}
+						}
+						else {
+							switch(i) {
+								case 1:
+									bytes[i][j] = 1;
+									break;
+								case 2:
+									bytes[i][j] = 6;
+									break;
+								case 3:
+									bytes[i][j] = 11;
+									break;
+							}
+						}	
+					}
+				}
+			}
+		}
+	}
+	
 	for(int i = 0; i < 4; i++) {
-		printf("GROUP %d: ", i+1); 
+		printf("GROUP %d: ", i+1);
 		for(int j = 0; j < 4; j++) {
 			printf("%d [%d], ", wordGroups[i][j], bytes[i][j]);
 			finalSBoxes[wordGroups[i][j]].byte = bytes[i][j];
@@ -2367,181 +2512,96 @@ int main (int argc, char *argv[]) {
 		printf("\n");
 	}
 	
-	
 	struct sBox tempSBox;
-	int followingTestCount = 0;
-	
-	sBoxUnderExamination = 0;
-	int tempIndexes[200];
-	
-	
-	//TO DO: store S-Boxes in 2D array to more easily access those in a given round
-	for(int round = 2; round < 10; round ++) {
+	int followingTestCount;
+
+	//Label the remaing S-Boxes 
+	for(int i = 0; i < 4; i++) {
+		for(int j = 0; j < 4; j ++) {
 		
-		sBoxUnderExamination = 0;
-		
-		printf("      ROUND %d     \n", round);
-		
-		for(int i = 0; i < sBoxIndex; i++) {
-		
-			if(finalSBoxes[i].round == round) {
+			tempSBox = finalSBoxes[wordGroups[i][j]];
+			printf("%d:\n", wordGroups[i][j]);
+			followingTestCount = 0;
 			
-				for(int j = 0; j < 8; j++) {
+			while(tempSBox.nextIndex >= 0) {
+				
+				followingTestCount++;
+				printf("	%s\n", (&finalSBoxes[tempSBox.nextIndex])->LUT8s[0].name);
+				
+				switch(tempSBox.byte) {
 					
-					if((&finalSBoxes[i])->LUT8s[j].bitA == 7) {
-						//printTile((&finalSBoxes[i])->LUT8s[j]);
-						//strcpy(originalLUTs[sBoxUnderExamination], (&finalSBoxes[i])->LUT8s[j].name);
-						tempIndexes[sBoxUnderExamination] = i;
-						followingSBoxes((&finalSBoxes[i])->LUT8s[j].name, "A6LUT_O6");
+					case 0:
+						finalSBoxes[tempSBox.nextIndex].byte = 13;
+						break;
 						
-					}
-					else if((&finalSBoxes[i])->LUT8s[j].bitE == 7) {
-						//printTile((&finalSBoxes[i])->LUT8s[j]);
-						//strcpy(originalLUTs[sBoxUnderExamination], (&finalSBoxes[i])->LUT8s[j].name);
-						tempIndexes[sBoxUnderExamination] = i;
-						followingSBoxes((&finalSBoxes[i])->LUT8s[j].name, "E6LUT_O6");
+					case 1:
+						finalSBoxes[tempSBox.nextIndex].byte = 10;
+						break;
 						
-					}
+					case 2: 
+						finalSBoxes[tempSBox.nextIndex].byte = 7;
+						break;
+						
+					case 3:
+						finalSBoxes[tempSBox.nextIndex].byte = 0;
+						break;
+						
+					case 4:
+						finalSBoxes[tempSBox.nextIndex].byte = 1;
+						break;
+						
+					case 5:
+						finalSBoxes[tempSBox.nextIndex].byte = 14;
+						break;
+						
+					case 6:
+						finalSBoxes[tempSBox.nextIndex].byte = 11;
+						break;
+						
+					case 7:
+						finalSBoxes[tempSBox.nextIndex].byte = 4;
+						break;
+						
+					case 8:
+						finalSBoxes[tempSBox.nextIndex].byte = 5;
+						break;
+						
+					case 9:
+						finalSBoxes[tempSBox.nextIndex].byte = 2;
+						break;
+						
+					case 10:
+						finalSBoxes[tempSBox.nextIndex].byte = 15;
+						break;
+						
+					case 11:
+						finalSBoxes[tempSBox.nextIndex].byte = 8;
+						break;
+						
+					case 12:
+						finalSBoxes[tempSBox.nextIndex].byte = 9;
+						break;
+						
+					case 13:
+						finalSBoxes[tempSBox.nextIndex].byte = 6;
+						break;
+						
+					case 14:
+						finalSBoxes[tempSBox.nextIndex].byte = 3;
+						break;
+						
+					case 15:
+						finalSBoxes[tempSBox.nextIndex].byte = 12;
+						break;
+						
+				
 				}
-			}
-		}
-		
-		
-		
-		for(int i = 0; i < sBoxUnderExamination; i++) {
-			
-			int nextSet = 0;
-			
-			for(int j = 0; j < 5; j++) {
-				for(int k = 0; k < 5; k++) {
 				
-					if(followingSBoxIndexes[i][j] == followingSBoxIndexes[i][k] && j != k) {
-						finalSBoxes[tempIndexes[i]].nextIndex = followingSBoxIndexes[i][j];
-						nextSet = 1;
-					}
-				
-				}
+				tempSBox = finalSBoxes[tempSBox.nextIndex];
 			}
-			
-		}
-		
-		
-		
+			printf("%d\n", followingTestCount);
+		}	
 	}
-	
-	for(int i = 0; i < 16; i++) {
-		printf("%d, ", associatedIndex[i]);
-	}
-	printf("/n");
-	
-	for(int i = 0; i < 16; i++) {
-		
-		tempSBox = finalSBoxes[associatedIndex[i]];
-		printf("%d:\n", associatedIndex[i]);
-		followingTestCount = 0;
-		
-		while(tempSBox.nextIndex > 0) {
-			
-			followingTestCount++;
-			printf("	%s\n", (&finalSBoxes[tempSBox.nextIndex])->LUT8s[0].name);
-			
-			switch(tempSBox.byte) {
-				
-				case 0:
-					finalSBoxes[tempSBox.nextIndex].byte = 13;
-					break;
-					
-				case 1:
-					finalSBoxes[tempSBox.nextIndex].byte = 10;
-					break;
-					
-				case 2: 
-					finalSBoxes[tempSBox.nextIndex].byte = 7;
-					break;
-					
-				case 3:
-					finalSBoxes[tempSBox.nextIndex].byte = 0;
-					break;
-					
-				case 4:
-					finalSBoxes[tempSBox.nextIndex].byte = 1;
-					break;
-					
-				case 5:
-					finalSBoxes[tempSBox.nextIndex].byte = 14;
-					break;
-					
-				case 6:
-					finalSBoxes[tempSBox.nextIndex].byte = 11;
-					break;
-					
-				case 7:
-					finalSBoxes[tempSBox.nextIndex].byte = 4;
-					break;
-					
-				case 8:
-					finalSBoxes[tempSBox.nextIndex].byte = 5;
-					break;
-					
-				case 9:
-					finalSBoxes[tempSBox.nextIndex].byte = 2;
-					break;
-					
-				case 10:
-					finalSBoxes[tempSBox.nextIndex].byte = 15;
-					break;
-					
-				case 11:
-					finalSBoxes[tempSBox.nextIndex].byte = 8;
-					break;
-					
-				case 12:
-					finalSBoxes[tempSBox.nextIndex].byte = 9;
-					break;
-					
-				case 13:
-					finalSBoxes[tempSBox.nextIndex].byte = 6;
-					break;
-					
-				case 14:
-					finalSBoxes[tempSBox.nextIndex].byte = 3;
-					break;
-					
-				case 15:
-					finalSBoxes[tempSBox.nextIndex].byte = 12;
-					break;
-					
-			
-			}
-			
-			tempSBox = finalSBoxes[tempSBox.nextIndex];
-		}
-		printf("%d\n", followingTestCount);
-		
-	}
-	
-	//Parse round 9 S-Boxes and assign the missing byte index
-	/*
-	int byteIdentified[16] = 0 ;
-	int unfoundByte = 0;
-	
-	for(int i = 0; i < sBoxIndex; i++) {
-		if(finalSBoxes[i].round == 9 ) {
-			if(finalSBoxes[i].byte != -1) {
-				byteIdentified[finalSBoxes[i].btye] = 1;
-			}
-			else {
-				unfoundByte = i;
-			}
-		}
-	}
-	
-	for(int i = 0; i < 16; i++) {
-		if(byteIdentified == 0) {
-			finalSBoxes[unfoundByte] = i;
-		}
-	}
-	*/
 	
 	FILE * roundSBoxes = fopen("sortedS-Boxes.txt", "w");
 	fputs("FINAL ROUND:", roundSBoxes);
@@ -2549,38 +2609,42 @@ int main (int argc, char *argv[]) {
 	fputs("----------------------", roundSBoxes);
 	fputc(10, roundSBoxes);
 	
-	for(int i = 0; i < sBoxIndex; i++) {
-		if(finalSBoxes[i].round == 10)
-			fputSbox(finalSBoxes[i], i, roundSBoxes);
-	}
-	
 	//If an S-Box is followed by a round 10 S-Box it must be in round 9 and so on 
-	for(int rounds = 9; rounds > 0; rounds --) {
-	
-		fputs("ROUND ", roundSBoxes);
-		fputc(rounds + 48, roundSBoxes);
-		fputc(10, roundSBoxes);
-		fputs("----------------------", roundSBoxes);
-		fputc(10, roundSBoxes);
+	for(int rounds = 10; rounds > 0; rounds --) {
+		
+		int testingRoundCount = 0;
+		
+		if(rounds < 10) {
+			fputs("ROUND ", roundSBoxes);
+			fputc(rounds + 48, roundSBoxes);
+			fputc(10, roundSBoxes);
+			fputs("----------------------", roundSBoxes);
+			fputc(10, roundSBoxes);
+		}
+		
 		for(int i = 0; i < sBoxIndex; i++) {
 	
-			if(finalSBoxes[i].round == rounds) 
+			if(finalSBoxes[i].round == rounds) {
+				testingRoundCount++;
 				fputSbox(finalSBoxes[i], i, roundSBoxes);
+			}
 			
-		}	
+		}
+
+		printf("ROUND %d SBOXES: %d\n", rounds, testingRoundCount);
 	}
+	
+	count = 0;
 	
 	//Any remaining S-Boxes must be used for key generation
 	fputs("KEY S-BOXES:", roundSBoxes);
 	fputc(10, roundSBoxes);
 	fputs("----------------------", roundSBoxes);
+	
 	for(int i = 0; i < sBoxCount; i++) {
 		if(finalSBoxes[i].nextSbox == NULL && finalSBoxes[i].previousSbox == NULL) {
 			fputSbox(finalSBoxes[i], i, roundSBoxes);
 			count++;
 		}
 	}
-	
-	printf("DONE!!\n");
-	
 }

@@ -145,6 +145,7 @@ struct sBox{
 	int round;
 	int column;
 	int byte;
+	int followingSBoxes[5]; 
 };
 
 	//Create and return a new sBox
@@ -156,6 +157,9 @@ struct sBox{
 		for (int i = 0; i < foundRoots; i++) {
 			strcpy(sBox.rootTiles[i], rootTiles[i]);
 			strcpy(sBox.rootNames[i], rootNames[i]);
+		}
+		for (int i = 0; i < 5; i++) {
+			sBox.followingSBoxes[i] = -1;
 		}
 		
 		sBox.LUT8s[0] = copyTile(LUT8);
