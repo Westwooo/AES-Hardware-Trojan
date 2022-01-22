@@ -704,148 +704,6 @@ void swap(int *x, int *y) {
     *y = temp; 
 } 
 
-int unusedLUTs(struct tile tile) {
-	
-	if(tile.LUT6s[0] == 2 && tile.LUT6s[1] == 2 && tile.LUT6s[2] == 2 && tile.LUT6s[3] == 2 
-	&& tile.LUT6s[4] == 2 && tile.LUT6s[5] == 2 && tile.LUT6s[6] == 2 && tile.LUT6s[7] == 2) 
-			return 1;
-	else
-		return 0;
-}
-
-//Detect the closest unused LUTs to the given Tile 
-void closestUnusedLUTs(struct tile tile) {
-	
-	//The current tile being examined
-	struct tile currentTile;
-	
-	struct tile closestTile[5];
-	int closestIndex = 0;
-	
-	//Boolean indicating if an unused Tile has been found
-	int LUTFound = 0;
-	int newTile = 0;
-	
-	//If there are two Tiles at the same (x,y) check if the other is unused
-	if(tilesSet[tile.x][tile.y][1] == 1) {
-		if(strcmp(tile.name, (*cartTiles[tile.x][tile.y][1]).name) == 0) {
-			currentTile = *cartTiles[tile.x][tile.y][0];
-		}
-		else {
-			currentTile = *cartTiles[tile.x][tile.y][1];
-		}
-		
-		if(unusedLUTs(currentTile) == 1) {
-			
-			closestIndex++;
-			
-			newTile = 1;
-			
-			for(int i = 0; i < unusedIndex; i++) {
-				if(strcmp(unusedTiles[i].name, currentTile.name) == 0) {
-					newTile = 0;
-					unusedFrequency[i]++;
-					break;
-				}
-			}
-			
-			if(newTile == 1) {
-				unusedTiles[unusedIndex] = currentTile;
-				unusedFrequency[unusedIndex]++;
-				unusedIndex++;
-			}
-			
-			if(closestIndex == 5)
-				return;
-		}
-	}	
-
-	//The current y Offset of tiles being examined
-	int searchOffset = 1;
-	int searching = 1;
-
-	//Repeat until an unused Tile has been found
-	while(searching == 1 && closestIndex < 5) {
-		
-		searching = 0;
-		
-		for(int i = -searchOffset; i < searchOffset + 1; i++) {
-			for(int j = -searchOffset; j < searchOffset + 1; j++) {
-				if(i != 0 || j != 0) {
-					if(abs(tile.x + i) > searchOffset - 1 || abs(tile.y + j) > searchOffset - 1) {
-						if(searchOffset < MAX_Y - tile.y && tile.y - searchOffset >= 0 && 
-						   searchOffset < MAX_X - tile.x && tile.x - searchOffset >= 0) {
-						  
-							searching = 1;
-							
-							
-							
-							currentTile = *cartTiles[tile.x + i][tile.y + j][0];
-							
-							if(unusedLUTs(currentTile) == 1) {
-								closestIndex++;
-								//printf("          %s\n", currentTile.name);
-								
-								newTile = 1;
-			
-								for(int i = 0; i < unusedIndex; i++) {
-									if(strcmp(unusedTiles[i].name, currentTile.name) == 0) {
-										newTile = 0;
-										unusedFrequency[i]++;
-										break;
-									}
-								}
-								
-								if(newTile == 1) {
-									unusedTiles[unusedIndex] = currentTile;
-									unusedFrequency[unusedIndex]++;
-									unusedIndex++;
-								}
-								
-								if(closestIndex == 5)
-									return;
-								//printTile(currentTile);
-								//return currentTile;
-							}
-						
-							if(tilesSet[tile.x + i][tile.y + j][1] == 1) {
-								currentTile = *cartTiles[tile.x + i][tile.y + j][1];
-								
-								if(unusedLUTs(currentTile) == 1) {
-									closestIndex++;
-									//printf("          %s\n", currentTile.name);
-									
-									newTile = 1;
-			
-									for(int i = 0; i < unusedIndex; i++) {
-										if(strcmp(unusedTiles[i].name, currentTile.name) == 0) {
-											newTile = 0;
-											unusedFrequency[i]++;
-											break;
-										}
-									}
-									
-									if(newTile == 1) {
-										unusedTiles[unusedIndex] = currentTile;
-										unusedFrequency[unusedIndex]++;
-										unusedIndex++;
-									}
-			
-									if(closestIndex == 5)
-										return;
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		
-		searchOffset++;
-	}
-	
-}
-
 //Recursively generate all permutations of the given numbers
 void generatePermutations(int *a, int l, int r) { 
 	int i; 
@@ -895,6 +753,88 @@ void generatePermutations(int *a, int l, int r) {
 	}
 }
 
+int unusedLUTs(struct tile tile) {
+	
+	for(int i = 0; i < 8; i++) {
+		if(tile.LUT6s[i] == 2)
+			return i;
+	}
+	
+	return -1;
+}
+
+struct tile * closestUnusedLUT(int x, int y) {
+	
+	struct tile * unusedTile;
+	int testResult;
+	int searching = 1;
+	int searchOffset = 1;
+		
+	unusedTile = cartTiles[x][y][0];
+	
+	testResult = unusedLUTs(*unusedTile);
+
+	if(testResult > -1) {
+		unusedTile->LUT6s[testResult] = 4;
+		return unusedTile;
+	}
+	
+	
+	
+	//If there is a second tile at the same (x,y) check if it's in use
+	if(tilesSet[x][y][1] == 1) {
+		
+		unusedTile = cartTiles[x][y][1];
+		
+		testResult = unusedLUTs(*unusedTile);
+		
+		if(testResult > -1) {
+			unusedTile->LUT6s[testResult] = 4;
+			return unusedTile;
+		}
+	}
+
+	while(searching == 1) {
+		
+		searching = 0;
+		
+		for(int i = -searchOffset; i < searchOffset + 1; i++) {
+			for(int j = -searchOffset; j < searchOffset + 1; j++) {
+				if(i != 0 || j != 0) {
+					if(abs(x + i) > searchOffset - 1 || abs(y + j) > searchOffset - 1) {
+						if(searchOffset < MAX_Y - y && y - searchOffset >= 0 && 
+						   searchOffset < MAX_X - x && x - searchOffset >= 0) {
+						  
+							searching = 1;
+							
+							unusedTile = cartTiles[x + i][y + j][0];
+							testResult = unusedLUTs(*unusedTile);
+							
+							if(testResult > -1) {
+								unusedTile->LUT6s[testResult] = 4;
+								return unusedTile;
+							}
+						
+							if(tilesSet[x + i][y + j][1] == 1) {
+								unusedTile = cartTiles[x + i][y + j][1];
+								
+								testResult = unusedLUTs(*unusedTile);
+							
+								if(testResult > -1) {
+									unusedTile->LUT6s[testResult] = 4;
+									return unusedTile;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		
+		searchOffset++;
+	}
+}
+
 int main (int argc, char *argv[]) {	
 	
 	//Open the json file to be processed and check success
@@ -929,7 +869,10 @@ int main (int argc, char *argv[]) {
 			connectionIndex++;
 		}
 	}
-	
+
+	char followingNames[7][30];
+	char followingTiles[7][30];
+
 	//Open the connection dictionaries and copy into the relevent dictionary
 	char nextLine[30];
 	char bramConnectionDictionary[200][3][30];
@@ -1410,243 +1353,15 @@ int main (int argc, char *argv[]) {
 	int noFollowerCount = 0;
 	testing = 0;
 	
-	//TO DO - use the recursive detection of following LUTS to determine rounds 
-	
-	//Go through rooting info to find each S-Boxes proceeding S-Box
-	for(int sbIndex = 0; sbIndex < sBoxCount; sbIndex++) {
-		
-		afterSboxesTotal = 0;
-
-		for(int lutIndex = 0; lutIndex < 8; lutIndex++) {
-			
-				retracing = 0;
-				LUTfound = 0;
-				sBoxFound = 0;
-				branches = 0;
-				choices = 0;
-
-				if(finalSBoxes[sbIndex].LUT8s[lutIndex].LUT6s[0] == 1) {
-					strcpy(searchName, "FFMUXC1_OUT1");
-				}
-				else {
-					strcpy(searchName, "FFMUXG1_OUT1");
-				}
-				strcpy(searchTile, finalSBoxes[sbIndex].LUT8s[lutIndex].name);
-				
-				
-				while(updated == 1) {
-					updated = 0;
-					
-					for(int cIndex = 0; cIndex < connectionIndex; cIndex++) {
-				
-						if(strcmp(searchTile, connections[cIndex].beginTile) == 0 && strcmp(searchName, connections[cIndex].beginName) == 0) {
-					
-							updated = 1;
-							strcpy(nextSearchTile, connections[cIndex].endTile);
-							strcpy(nextSearchName, connections[cIndex].endName);
-
-							if(testing == 1) {
-								printf("%s %s %s\n", searchTile, searchName, connections[cIndex].endName);
-							}
-							
-							for (int i = 0; i < 8; i++) {
-								LUTtest[i] = searchName[i+1];
-								if (i == 7) {
-									LUTtest[i] = 0;
-								}
-							}
-							
-							
-							
-							for (int i = 0; i < 4; i++) {
-								tileTest[i] = searchTile[i];
-								if(i == 3) {
-									tileTest[i] = 0;
-								}
-							}
-							
-							for(int i = 0; i < 5; i++) {
-								MUXtest[i] = searchName[i+1];
-								if(i == 4)
-									MUXtest[i] = 0;
-							}
-							
-
-							
-							for(int i = strlen(searchName) - 3; i < strlen(searchName); i++) {
-								MUXtest[7+i-strlen(searchName)] = searchName[i];
-							}
-							MUXtest[7] = 0;
-							MUXnumber = searchName[1];
-							
-							//BRANCHES MAY OCCUR AT POINTS OTHER THAN INT TILES
-							if(strcmp("INT", tileTest) == 0 && retracing == 0) {
-								strcpy(possibleRootTiles[branches][choices], connections[cIndex].endTile);
-								strcpy(possibleRootNames[branches][choices], connections[cIndex].endName);
-								choices++;
-							}
-							
-							if((strcmp(LUTtest, "6LUT_O6") == 0 || strcmp(MUXtest, "7MUXSEL") == 0 || strcmp(MUXtest, "8MUXSEL") == 0) && strcmp(foundTile, searchTile) != 0) {
-								
-								LUTfound++;
-								
-								if(strcmp(LUTtest, "6LUT_O6") == 0)
-									LUTletter = searchName[0];
-								else {
-									if(MUXnumber == 55)
-										LUTletter = searchName[6];
-									else {
-										for(int i = 0; i < 4; i++) {
-											MUXtest[i] = searchName[i+6];
-											if(i == 3)
-												MUXtest[i] = 0;
-										}
-										
-										if(strcmp("TOP", MUXtest) == 0) 
-											LUTletter = 70;
-										else
-											LUTletter = 66;
-									}
-								}
-
-								//printf("%s %s %s\n", searchTile, searchName, connections[cIndex].endName);
-								strcpy(foundTile, connections[cIndex].beginTile);
-
-								for(int i = 0; i < sBoxIndex; i++) {
-									for(int j = 0; j < 8; j++) {
-										if(strcmp(finalSBoxes[i].LUT8s[j].name, foundTile) == 0) {
-
-											if(finalSBoxes[i].LUT8s[j].LUT6s[7] == 0) {
-												if(LUTletter < 69 && LUTletter > 64) {
-													if(testing == 1) {
-														printf("Following sBox found:\n");
-														printSbox(finalSBoxes[i]);
-													}
-													finalSBoxes[i].previousSbox = &finalSBoxes[sbIndex];
-													finalSBoxes[sbIndex].nextSbox = &finalSBoxes[i];
-													sBoxFound = 1;
-													afterSboxesTotal++;
-													break;
-												}
-											}
-											else if(LUTletter > 68 && LUTletter < 73) {
-												if(testing == 1) {
-													printf("Following sBox found:\n");
-													printSbox(finalSBoxes[i]);
-												}
-												finalSBoxes[i].previousSbox = &finalSBoxes[sbIndex];
-												finalSBoxes[sbIndex].nextSbox = &finalSBoxes[i];
-												sBoxFound = 1;
-												afterSboxesTotal++;
-												break;
-											}
-											
-											
-										}
-									}
-									if(sBoxFound == 1)
-										break;
-								}
-							}
-							
-						}
-					}
-					
-					if(choices > 1 && retracing == 0) {
-						choicesPerBranch[branches] = choices;
-						branches++;
-					}
-					choices = 0;
-					
-					foundTile[0] = 0;
-					strcpy(searchName, nextSearchName);
-					strcpy(searchTile, nextSearchTile);
-					
-					if(sBoxFound == 1)
-						break;
-					
-					//TODO test removal of sBoxFound == 0
-					if(updated == 0 && sBoxFound == 0 && branches > 0) {
-						
-						if(retracing == 0) {
-							branches--;
-							retraceCounter = 0;
-						}
-						
-						retracing = 1;
-
-						strcpy(searchName, possibleRootNames[branches][retraceCounter]);
-						strcpy(searchTile, possibleRootTiles[branches][retraceCounter]);
-						
-						retraceCounter++;
-						updated = 1;
-						if(retraceCounter == choicesPerBranch[branches] - 1) {
-							branches--;
-							retraceCounter = 0;
-						}
-						
-						
-						LUTfound = 1;
-					}
-					
-					
-					if(LUTfound > 1) 
-						break;
-					
-					if(testing == 1)
-						printf("-----------------------------------------\n");
-				}
-			
-				updated = 1;
-		}
-		
-		finalSBoxes[sbIndex].followingLUTs = afterSboxesTotal;
-		
-		printf("\rProgress: %d / %d", sbIndex, tileIndex/8);
-		fflush(stdout);
-	}
-	
-	printf("\rProgress: %d/%d", tileIndex/8, tileIndex/8);
-	fflush(stdout);
-	
 	int finalRoundSBoxes[16];
 	int finalIndex = 0;
 	int count = 0;
 	
-	//If a S-Box has no following S-Boxes then it must belong in the final round
-	//TODO: for ever final roudn S-Box LUT8 find the closest unused LUT4 and detnote 
-	for(int i = 0; i < sBoxIndex; i++) {
-		if(finalSBoxes[i].followingLUTs == 0 && finalSBoxes[i].previousSbox != NULL) {
-			finalRoundSBoxes[finalIndex] = i;
-			finalIndex++;
-			finalSBoxes[i].round = 10;
-			count++;
-		}
-	}
-	
-	int testingRoundCount = 0;
-	
-	//If an S-Box is followed by a round 10 S-Box it must be in round 9 and so on 
-	for(int rounds = 9; rounds > 0; rounds --) {
-		
-		testingRoundCount = 0;
-		
-		for(int i = 0; i < sBoxIndex; i++) {
-	
-			if(finalSBoxes[i].nextSbox != NULL) {
-				if(finalSBoxes[i].nextSbox->round == rounds + 1) {
-					finalSBoxes[i].round = rounds;
-					testingRoundCount++;
-				}
-			}
-		}
-	}	
-	
 	//TESTING
 	int followTest = 0;
 	int foundLUTs = 0;
-	char followingNames[7][30];
-	char followingTiles[7][30];
+	//char followingNames[7][30];
+	//char followingTiles[7][30];
 	
 	int tempIndex = 0;
 	char sBoxNamesFollowing[60][30];
@@ -1657,14 +1372,25 @@ int main (int argc, char *argv[]) {
 	for(int i = 0; i < sBoxIndex; i++) {
 		for(int j = 0; j < 8; j++) {
 			
-			if(finalSBoxes[i].round > 0 && finalSBoxes[i].round < 10) {
+			//if(finalSBoxes[i].round > 0 && finalSBoxes[i].round < 10) {
 				
 				foundLUTs = 0;
 				tempIndex = 0;
 				
 				if(finalSBoxes[i].LUT8s[j].LUT6s[0] == 1 && finalSBoxes[i].LUT8s[j].bitA == 7) {
 					
+					
 					followTest = nextLUT(finalSBoxes[i].LUT8s[j].name, "FFMUXC1_OUT1", followingNames, followingTiles, foundLUTs);
+					
+					
+					if(followTest == 1) {
+						finalSBoxes[i].round = 10;
+						break;
+					}
+					else if(followTest == 2) {
+						finalSBoxes[i].round = -1;
+						break;
+					}
 					
 					if(testing == 1) {
 						printTile(finalSBoxes[i].LUT8s[j]);
@@ -1740,7 +1466,19 @@ int main (int argc, char *argv[]) {
 					if(testing == 1)
 						printTile(finalSBoxes[i].LUT8s[j]);
 					
+					
 					followTest = nextLUT(finalSBoxes[i].LUT8s[j].name, "FFMUXG1_OUT1", followingNames, followingTiles, foundLUTs);
+					
+					
+					if(followTest == 1) {
+						finalSBoxes[i].round = 10;
+						break;
+					}
+					else if(followTest == 2) {
+						finalSBoxes[i].round = -1;
+						break;
+					}
+					
 					
 					for(int k = 0; k < followTest; k++) {
 						if(followingNames[k][2] == 76) {
@@ -1803,7 +1541,7 @@ int main (int argc, char *argv[]) {
 						printf("\n");
 				}
 			
-			}
+			//}
 			
 		}
 		printf("\rProgress: %d / 160", i);
@@ -1812,13 +1550,27 @@ int main (int argc, char *argv[]) {
 	printf("\rProgress: 160 / 160");
 	fflush(stdout);
 	
+	
+	
 	for(int i = 0; i < sBoxIndex; i++) {
-		if(finalSBoxes[i].round > 0 && finalSBoxes[i].round < 10) {
+		if(finalSBoxes[i].round == 0) {
 			for(int j = 0; j < 5; j++) {
 				for(int k = 0; k < 5; k++) {
 					if((finalSBoxes[i].followingSBoxes[j] == finalSBoxes[i].followingSBoxes[k]) && j != k)
 						finalSBoxes[i].nextIndex = finalSBoxes[i].followingSBoxes[j];
 				}
+			}
+		}
+	}
+	
+	
+	int roundCount = 0;
+	for(int rounds = 10; rounds > 1; rounds--) {
+		roundCount = 0;
+		for(int i = 0; i < sBoxIndex; i++) {
+			if(finalSBoxes[finalSBoxes[i].nextIndex].round == rounds){
+				roundCount++;
+				finalSBoxes[i].round = rounds - 1;
 			}
 		}
 	}
@@ -1832,6 +1584,7 @@ int main (int argc, char *argv[]) {
 	sprintf(temp, "%d", finalIndex * 8);
 	fputs(temp, finalRoundFound);
 	fputc(10, finalRoundFound);
+	
 	
 	//Print the final round LUTs to a file, to be used by JSON_editor.c
 	for(int i = 0; i < finalIndex; i++) {
@@ -2289,7 +2042,7 @@ int main (int argc, char *argv[]) {
 	fputs("----------------------", roundSBoxes);
 	
 	for(int i = 0; i < sBoxCount; i++) {
-		if(finalSBoxes[i].nextSbox == NULL && finalSBoxes[i].previousSbox == NULL) {
+		if(finalSBoxes[i].round == -1) {
 			fputSbox(finalSBoxes[i], i, roundSBoxes);
 			count++;
 		}
@@ -2300,6 +2053,12 @@ int main (int argc, char *argv[]) {
 	int byteMapping[16] = {4, 9, 14, 3, 8, 13, 2, 7, 12, 1, 6, 11, 0, 5, 10, 15};
 	int nextIndex = 0;
 	
+	char xorTiles[128][30];
+	char xorNames[128][30];
+	
+	char triggerInputNames[128][30];
+	char triggerInputTiles[128][30];
+	
 	for(int mapIndex = 0; mapIndex < 16; mapIndex++) {
 		for(int sbIndex = 0; sbIndex < sBoxIndex; sbIndex++) {
 			if(finalSBoxes[sbIndex].round == 10 && finalSBoxes[sbIndex].byte == byteMapping[mapIndex]) {
@@ -2308,16 +2067,25 @@ int main (int argc, char *argv[]) {
 					for(int i = 0; i < 8; i++) {
 						if(finalSBoxes[sbIndex].LUT8s[i].bitA == bit || finalSBoxes[sbIndex].LUT8s[i].bitE == bit) {
 								
-							printf("%d     ", bitCount++);
-							printf(finalSBoxes[sbIndex].LUT8s[i].name);
+							strcpy(xorTiles[bitCount], finalSBoxes[sbIndex].LUT8s[i].name);
+							
+							if(testing == 1) {
+								printf("%d     ", bitCount);
+								printf(finalSBoxes[sbIndex].LUT8s[i].name);
+							}
+							
 							foundLUTs = 0;
+							testString[0] = 0;
+							
+							
 							
 							if(finalSBoxes[sbIndex].LUT8s[i].LUT6s[0] == 1)
 								xorAfterFinal = nextLUT(finalSBoxes[sbIndex].LUT8s[i].name, "FFMUXC1_OUT1", followingNames, followingTiles, foundLUTs);
 							else
 								xorAfterFinal = nextLUT(finalSBoxes[sbIndex].LUT8s[i].name, "FFMUXG1_OUT1", followingNames, followingTiles, foundLUTs);
 							
-							printf("     %s (%s)\n", followingNames[0], followingTiles[0]);
+							if(testing == 1)
+								printf("     %s (%s)\n", followingNames[0], followingTiles[0]);
 								
 							strcpy(searchName, followingNames[0]);
 							strcpy(searchTile, followingTiles[0]);
@@ -2328,28 +2096,44 @@ int main (int argc, char *argv[]) {
 								
 								for(int cIndex = 0; cIndex < connectionIndex; cIndex++) {
 									
-								if(strcmp(searchName, connections[cIndex].beginName) == 0 && strcmp(searchTile, connections[cIndex].beginTile) == 0) {
+									if(strcmp(searchName, connections[cIndex].beginName) == 0 && strcmp(searchTile, connections[cIndex].beginTile) == 0) {
 											
+										nextIndex = cIndex;
+										strcpy(nextSearchName, connections[cIndex].endName);
+										strcpy(nextSearchTile, connections[cIndex].endTile);
+										searching = 1;
 										
 										
-										//if(searching == 0) {
-											nextIndex = cIndex;
-											strcpy(nextSearchName, connections[cIndex].endName);
-											strcpy(nextSearchTile, connections[cIndex].endTile);
-											searching = 1;
-										//}
-										//else
-											//printf("----------------------------------NEEDS BRANCHING TECH-------------------------\n");
+										
+										memcpy(testString, connections[cIndex].beginName, 7);
+										testString[7] = 0;
+										
+										
+										if(strcmp(testString, "CLE_CLE") == 0 && (connections[cIndex].beginName[strlen(connections[cIndex].beginName) - 1] == 81 || connections[cIndex].beginName[strlen(connections[cIndex].beginName) - 2] == 81)) {
+											searching = 0;
+											if(testing == 1) {
+												printf("               ");
+												printConnection(connections[nextIndex]);
+											}
+											strcpy(triggerInputNames[bitCount], connections[cIndex].beginName);
+											strcpy(triggerInputTiles[bitCount], connections[cIndex].beginTile);
+											bitCount++;
+											break;
+										}
+										
 					
 									}
 									
 								}
 								
-								printf("               ");
-								printConnection(connections[nextIndex]);
+								
+								
 								strcpy(searchName, nextSearchName);
 								strcpy(searchTile, nextSearchTile);
 								
+							}
+							if(testing == 1) {
+								printf("------------------------------------\n");
 							}
 						}
 					}	
@@ -2357,4 +2141,283 @@ int main (int argc, char *argv[]) {
 			}
 		}
 	}
+	
+	int yAverage = 0;
+	int xAverage = 0;
+	int tempX;
+	int tempY;
+	struct tile * closest;
+	
+	char tempTiles[5][30];
+	char tempNames[5][30];
+	
+	char triggerOut[30] = {"CLE_CLE_L_SITE_0_A1"};
+	
+	int indexTest = 5;
+	
+	char firstLayerTriggerTiles[128][30];
+	char firstLayerTriggerNames[128][30];
+	
+	//Decide where the trigger connections will begin
+	for(int xorIndex = 0; xorIndex < bitCount; xorIndex=xorIndex+5) {
+		
+		if(xorIndex > bitCount - 5) 
+			indexTest = bitCount  - xorIndex;
+		else
+			indexTest = 5;
+		
+		yAverage = 0;
+		xAverage = 0;
+		
+		for(int groupIndex = 0; groupIndex < indexTest; groupIndex++) {
+			
+			if(testing == 1) {
+				printf(triggerInputTiles[xorIndex+groupIndex]);
+				printf("\n");
+			}
+			
+			getTileCoords(triggerInputTiles[xorIndex+groupIndex], &tempX, &tempY);
+			yAverage += tempY;
+			xAverage += tempX;
+		}
+		
+		yAverage = yAverage/indexTest;
+		xAverage = xAverage/indexTest;
+		
+		closest = closestUnusedLUT(xAverage, yAverage);
+		
+		if(testing == 1) {
+			printf("	Average coordinates: (%d,%d)\n", xAverage, yAverage);
+			printf("	");
+			printTile(*closest);
+			printf("\n");
+		}
+
+		memcpy(testString, closest->name, 4);
+		testString[4] = 0;
+		
+		//TO DO - check that this is the correct connection name
+		if(strcmp(testString, "CLEM") == 0) {
+			strcpy(triggerOut, "CLE_CLE_M_SITE_0_A1");
+		} else
+			strcpy(triggerOut, "CLE_CLE_L_SITE_0_A1");
+		
+		for(int i = 0; i < 8; i++) {
+			if(closest->LUT6s[i] == 4) {
+				triggerOut[strlen(triggerOut) - 2] = triggerOut[strlen(triggerOut) - 2] + i;
+				closest->LUT6s[i] = 3;
+			}
+		}
+		
+		if(testing == 1) {
+			printTile(*closest);
+			printf("\n");
+		}
+		
+		for(int i = 0 ; i < indexTest; i++) {
+			
+			strcpy(firstLayerTriggerTiles[xorIndex+i], closest->name);
+			strcpy(firstLayerTriggerNames[xorIndex+i], triggerOut);
+			
+			if(testing == 1) {
+				printf("%d    ", xorIndex+i);
+				printf(triggerInputNames[xorIndex+i]);
+				printf("   (%s) ---->    ", triggerInputTiles[xorIndex+i]);
+				printf(triggerOut);
+				printf("   (%s)\n", closest->name);
+			}
+			
+			triggerOut[strlen(triggerOut) - 1]++;
+		}
+	}
+	
+	printf("-----------------FIRST LAYER CONNECTIONS---------------\n");
+	
+	for(int i = 0; i < 128; i++) {
+		printf("%d    ", i);
+		printf(triggerInputNames[i]);
+		printf("   (%s) ---->    ", triggerInputTiles[i]);
+		printf(firstLayerTriggerNames[i]);
+		printf("   (%s)\n", firstLayerTriggerTiles[i]);
+	}
+	
+	char secondLayerInputTiles[128][30];
+	char secondLayerInputNames[128][30];
+	char secondLayerOutputTiles[128][30];
+	char secondLayerOutputNames[128][30];
+	char tempTile[30];
+	char tempName[30];
+	
+	int newTiles = 0;
+	int secondLayerIndex = 0;
+	char lutName[9] = {"A5LUT_O5"};
+	lutName[8] = 0;
+	
+	yAverage = 0;
+	xAverage = 0;
+	
+	testing = 0;
+	
+	for(int i = 0; i < 128; i++) {
+		
+		//If we see a new tile create a new connection in the and tree
+		if(strcmp(tempTile, firstLayerTriggerTiles[i]) != 0) {
+			
+			strcpy(tempTile, firstLayerTriggerTiles[i]);
+			strcpy(tempName, firstLayerTriggerNames[i]);
+			
+			if(testing == 1) {
+				printf(tempTile);
+				printf("\n");
+			}
+			
+			//Set the secondlayer input names and tiles
+			strcpy(secondLayerInputTiles[secondLayerIndex], tempTile);
+			lutName[0] = tempName[strlen(tempName) - 2];
+			strcpy(secondLayerInputNames[secondLayerIndex], lutName);
+			secondLayerIndex++;
+			
+			
+			getTileCoords(tempTile, &tempX, &tempY);
+			yAverage += tempY;
+			xAverage += tempX;
+			
+			newTiles++;
+			
+			if(newTiles == 5 || i == 127) {
+				
+				yAverage = yAverage/newTiles;
+				xAverage = xAverage/newTiles;
+				
+				closest = closestUnusedLUT(xAverage, yAverage);
+				
+				memcpy(testString, closest->name, 4);
+				testString[4] = 0;
+				
+				//TO DO - check that this is the correct connection name
+				if(strcmp(testString, "CLEM") == 0) {
+					strcpy(triggerOut, "CLE_CLE_M_SITE_0_A1");
+				} else
+					strcpy(triggerOut, "CLE_CLE_L_SITE_0_A1");
+				
+				for(int i = 0; i < 8; i++) {
+					if(closest->LUT6s[i] == 4) {
+						triggerOut[strlen(triggerOut) - 2] = triggerOut[strlen(triggerOut) - 2] + i;
+						closest->LUT6s[i] = 3;
+					}
+				}
+				
+				for(int j = secondLayerIndex - newTiles; j < secondLayerIndex; j++) {
+					strcpy(secondLayerOutputTiles[j], closest->name);
+					strcpy(secondLayerOutputNames[j], triggerOut);
+					triggerOut[strlen(triggerOut) - 1]++;
+				}
+				
+				newTiles = 0;
+			}	
+		}
+	}
+	
+	printf("-----------------SECOND LAYER CONNECTIONS---------------\n");
+	
+	for(int i = 0; i < secondLayerIndex; i++) {
+		printf("%d    ", i);
+		printf(secondLayerInputNames[i]);
+		printf("   (%s) ---->    ", secondLayerInputTiles[i]);
+		printf(secondLayerOutputNames[i]);
+		printf("   (%s)\n", secondLayerOutputTiles[i]);
+	}
+	
+	tempTile[0] = 0;
+	tempName[0] = 0;
+	newTiles = 0;
+	
+	char thirdLayerInputTiles[128][30];
+	char thirdLayerInputNames[128][30];
+	
+	char thirdLayerOutputTiles[128][30];
+	char thirdLayerOutputNames[128][30];
+	int thirdLayerIndex = 0;
+	
+	
+	
+	for(int i = 0; i < secondLayerIndex - 1; i++) {
+		
+		//If we see a new tile create a new connection in the and tree
+		if(strcmp(tempTile, secondLayerOutputTiles[i]) != 0) {
+			
+			strcpy(tempTile, secondLayerOutputTiles[i]);
+			strcpy(tempName, secondLayerOutputNames[i]);
+			
+			//Set the secondlayer input names and tiles
+			strcpy(thirdLayerInputTiles[thirdLayerIndex], tempTile);
+			lutName[0] = tempName[strlen(tempName) - 2];
+
+			strcpy(thirdLayerInputNames[thirdLayerIndex], lutName);
+			thirdLayerIndex++;
+			
+			
+			getTileCoords(tempTile, &tempX, &tempY);
+			yAverage += tempY;
+			xAverage += tempX;
+			
+			newTiles++;
+			
+			if(newTiles == 5 || i == 127) {
+				
+				//TO DO - change hardcoded index
+				
+				strcpy(thirdLayerInputTiles[thirdLayerIndex], secondLayerInputTiles[25]);
+				strcpy(thirdLayerInputNames[thirdLayerIndex], secondLayerInputNames[25]);
+				
+				getTileCoords(thirdLayerInputTiles[thirdLayerIndex], &tempX, &tempY);
+				yAverage += tempY;
+				xAverage += tempX;
+				newTiles++;
+				
+				
+				yAverage = yAverage/newTiles;
+				xAverage = xAverage/newTiles;
+				
+				closest = closestUnusedLUT(xAverage, yAverage);
+				
+				memcpy(testString, closest->name, 4);
+				testString[4] = 0;
+				
+				//TO DO - check that this is the correct connection name
+				if(strcmp(testString, "CLEM") == 0) {
+					strcpy(triggerOut, "CLE_CLE_M_SITE_0_A1");
+				} else
+					strcpy(triggerOut, "CLE_CLE_L_SITE_0_A1");
+				
+				for(int i = 0; i < 8; i++) {
+					if(closest->LUT6s[i] == 4) {
+						triggerOut[strlen(triggerOut) - 2] = triggerOut[strlen(triggerOut) - 2] + i;
+						closest->LUT6s[i] = 3;
+					}
+				}
+				
+				//thirdLayerIndex++;
+				
+				for(int j = 0; j <= thirdLayerIndex; j++) {
+					strcpy(thirdLayerOutputTiles[j], closest->name);
+					strcpy(thirdLayerOutputNames[j], triggerOut);
+					triggerOut[strlen(triggerOut) - 1]++;
+				}
+				
+				newTiles = 0;
+			}	
+		}
+	}
+	
+	printf("-----------------THIRD LAYER CONNECTIONS---------------\n");
+	
+	for(int i = 0; i <= thirdLayerIndex; i++) {
+		printf("%d    ", i);
+		printf(thirdLayerInputNames[i]);
+		printf("   (%s) ---->    ", thirdLayerInputTiles[i]);
+		printf(thirdLayerOutputNames[i]);
+		printf("   (%s)\n", thirdLayerOutputTiles[i]);
+	}
+	
 }
