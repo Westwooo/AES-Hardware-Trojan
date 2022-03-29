@@ -74,10 +74,20 @@ char initialTile[30];
 
 FILE * triggerConnections;
 
+//Print the GoAhead command to block the given connection
+void blockConnection(char beginTile[], char beginName[], FILE * file) {
+	
+	//Print the command to block the begining of the given connection
+	fputs("SetPortUsageInSelection PortName=",file);
+	fputs(beginName, file);
+	fputs(" CheckForExistence=False IncludeReachablePorts=True PortUsage=Blocked TileLocation=", file);
+	fputs(beginTile, file);
+	fputs(" TilesToExclude=;", file);
+	fputc(10, file);
+}
+
 //Recursive methods to find and return name and tile of all LUTs following a given port
 int nextLUT(char tile[], char name[], char foundNames[][30], char foundTiles[][30], int foundLUTs) {
-		
-	testing = 0;
 		
 	int lutFound = 0;
 	int newConnections = 1;
@@ -104,12 +114,16 @@ int nextLUT(char tile[], char name[], char foundNames[][30], char foundTiles[][3
 		newConnections = 0;
 		
 		for(int cIndex = 0; cIndex < connectionIndex; cIndex++) {
-				
+			
 			if(strcmp(searchTile, connections[cIndex].beginTile) == 0 && strcmp(searchName, connections[cIndex].beginName) == 0) {
 				
 				//TESTING
 				if(testing == 1) {
-					printConnection(connections[cIndex]);
+					fprintf(triggerConnections, "          %s.%s", connections[cIndex].beginTile, connections[cIndex].beginName);
+					fputc(10, triggerConnections);
+					
+					printf("          %s.%s\n", connections[cIndex].beginTile, connections[cIndex].beginName);
+					
 				}
 				
 				newConnections++;
@@ -122,12 +136,8 @@ int nextLUT(char tile[], char name[], char foundNames[][30], char foundTiles[][3
 			
 				if(strcmp(lutTest, "LUT") == 0 /*strcmp(initialTile, connections[cIndex].endTile) != 0*/) {
 					
-					if(testing == 1)
-						printConnection(connections[cIndex]);
-					
 					strcpy(foundNames[foundLUTs], connections[cIndex].endName);
 					strcpy(foundTiles[foundLUTs], connections[cIndex].endTile);
-					//printf("%d: %s (%s)\n", foundLUTs, foundNames[foundLUTs], foundTiles[foundLUTs]);
 					
 					lutFound = 1;
 					foundLUTs++;
@@ -142,7 +152,6 @@ int nextLUT(char tile[], char name[], char foundNames[][30], char foundTiles[][3
 				}
 				else if (newConnections > 1) {
 					//A branch has been enountered, so safe other routes accordingly
-					//printf("HERE1\n");
 					branchPoints[branches][newConnections - 2] = &connections[cIndex];
 				}
 			}
@@ -153,11 +162,6 @@ int nextLUT(char tile[], char name[], char foundNames[][30], char foundTiles[][3
 			branches++;
 		}
 		
-		//TESTING
-		if(testing == 1) {
-			printf("--------------------------------------------------------\n");
-		}
-		
 		strcpy(searchName, nextSearchName);
 		strcpy(searchTile, nextSearchTile);
 		
@@ -166,17 +170,10 @@ int nextLUT(char tile[], char name[], char foundNames[][30], char foundTiles[][3
 	for(int i = branches - 1; i >= 0; i--) {
 		for(int j = 0; j < 5; j++) {
 			if(branchPoints[i][j] != NULL) {
-				
-				if(testing == 1) {
-					printf("				-----BRANCH -----\n");
-					printConnection(*branchPoints[i][j]);
-					printf("--------------------------------------------------------\n");
-				}
 				foundLUTs = nextLUT(branchPoints[i][j]->endTile, branchPoints[i][j]->endName, foundNames, foundTiles, foundLUTs);
 			}
 		}
 	}
-	
 	
 	return foundLUTs;
 }
@@ -781,8 +778,6 @@ struct tile * closestUnusedLUT(int x, int y) {
 		return unusedTile;
 	}
 	
-	
-	
 	//If there is a second tile at the same (x,y) check if it's in use
 	if(tilesSet[x][y][1] == 1) {
 		
@@ -871,10 +866,36 @@ int main (int argc, char *argv[]) {
 			connectionIndex++;
 		}
 	}
+	
+	//TO DO - move this to somewhere more relevent 
+	//Write command to tcl script to block all in use ports
+	FILE * blockingScript = fopen("./Path Search/blockingScript.tcl", "w");
+	int testX, testY;
+	char tileTest[10];
+	char tempTile[30];
+	for(int i = 0; i < connectionIndex; i++) {
+		
+		getTileCoords(connections[i].beginTile, &testX, &testY);
+		memcpy(&tileTest, &connections[i].beginTile, 4);
+		if(testX > 23 && testX < 33 && testY > 81 && testY < 125) {
+		//if(testX > 14 && testX < 25 && testY > 88 && testY < 142) {
+			if(strcmp(tileTest, "CLEM") == 0 && testX > 24) {
+				snprintf(tempTile, 20, "CLEM_R_X%dY%d", testX, testY);
+				blockConnection(tempTile, connections[i].beginName, blockingScript);
+			}
+			else {
+				blockConnection(connections[i].beginTile, connections[i].beginName, blockingScript);
+			}
+		}
+	}
+	fflush(blockingScript);
+	fclose(blockingScript);
 
+	//TO DO - find a more logical place for these
 	char followingNames[7][30];
 	char followingTiles[7][30];
 
+	//TO DO - find a better place for this
 	//Open the connection dictionaries and copy into the relevent dictionary
 	char nextLine[30];
 	char bramConnectionDictionary[200][3][30];
@@ -893,6 +914,9 @@ int main (int argc, char *argv[]) {
 		strcpy(bramConnectionDictionary[bramIndex][TILE], nextLine);
 		bramIndex++;
 	}
+	fclose(bramDictionary);
+	fclose(logicDictionary);
+	fclose(tileDictionary);
 	
 	//Open the file to write found S-Boxes to 
 	FILE * foundThem = fopen("./FPGA_S-Boxes.txt", "w");
@@ -938,6 +962,8 @@ int main (int argc, char *argv[]) {
 	/* Search the JSON file for any LUT6s used to partialy implement S-Boxes. Those found 
 	   are added to sBoxTiles 
 	*/
+	//TO DO - check the necessity of labelling XORs and Unused LUTs
+	//TO DO - implement bucket sort for connections based on the coordinates of the start
 	while(next != EOF) {
 		
 		getNextWord(word);
@@ -1325,14 +1351,12 @@ int main (int argc, char *argv[]) {
 	fflush(stdout);	
 	printf("\n\n\n");
 	
-
-	
 	//TO DO - check necessity and label
 	char LUTletter;
 	int updated = 1;
 	int LUTfound = 0;
 	char foundTile[30];
-	char tileTest[10];
+	tileTest[0] = 0;
 	int sBoxFound = 0;
 	char possibleRootTiles[10][10][30];
 	char possibleRootNames[10][10][30];
@@ -1341,7 +1365,6 @@ int main (int argc, char *argv[]) {
 	int branches = 0;
 	int retracing = 0;
 	int retraceCounter = 0;
-	int testing = 0; 
 	int afterSboxesTotal = 0;
 	int MUXnumber = 0;
 	char LUTtest[8];
@@ -1546,14 +1569,14 @@ int main (int argc, char *argv[]) {
 			//}
 			
 		}
-		printf("\rProgress: %d / 160", i);
+		printf("\rProgress: %d / %d", i, sBoxIndex);
 		fflush(stdout);
 	}
-	printf("\rProgress: 160 / 160");
+	printf("\rProgress: %d / %d", sBoxIndex, sBoxIndex);
 	fflush(stdout);
 	
-	
-	
+	//Each S-Box is diffused over multiple bytes in the following round, we know bit 7 goes to 5 S-Boxes, but to the 
+	//same one twice, the one it goes to twice allows for a 1:1 correspondnce 
 	for(int i = 0; i < sBoxIndex; i++) {
 		if(finalSBoxes[i].round == 0) {
 			for(int j = 0; j < 5; j++) {
@@ -1565,7 +1588,7 @@ int main (int argc, char *argv[]) {
 		}
 	}
 	
-	
+	//Label all remaining S-Boxes
 	int roundCount = 0;
 	for(int rounds = 10; rounds > 1; rounds--) {
 		roundCount = 0;
@@ -1579,6 +1602,7 @@ int main (int argc, char *argv[]) {
 	
 	printf("\n\n");
 	
+	//TO DO - remove this, only required for basic attack, not the triggered version 
 	FILE * finalRoundFound = fopen("./finalRoundLUTs.txt", "w");
 	fputs(argv[1], finalRoundFound);
 	fputc(10, finalRoundFound);
@@ -1604,6 +1628,7 @@ int main (int argc, char *argv[]) {
 			
 		}
 	}
+	fclose(finalRoundFound);
 	
 	int searching = 0;
 	int finalConnection = 0;
@@ -1636,7 +1661,6 @@ int main (int argc, char *argv[]) {
 	//		- {0,4,8,12}, {1,5,9,13}, {2,6,10,14}, {3,7,11,15}
 	//Further we can distinguish between the forst ans second halves of each of these groups 
 	//Since bytes 0-7, are connected to a different BRAM from bytes 8-15
-	//TO DO - HOW TO DISTINGUISH BETWEEN FIRST AND SECOND HALVES OF THE STATE
 	for(int i = 0; i < sBoxIndex; i++) {
 		if(finalSBoxes[i].round == 1) {
 			for(int j = 0; j < 6; j++) {
@@ -1762,8 +1786,9 @@ int main (int argc, char *argv[]) {
 				
 				
 				if(j == 5) {
-					//if(tempY > 175) {
-					if(tempX == 8) {
+					//TO DO - find a way to avoid this hard coding 
+					if(tempY > 175) {
+					//if(tempX == 8) {
 						if(atoi(bramNumber) < 3) {
 							wordGroups[0][lowerIndexes[0]] = i;
 							lowerIndexes[0]++;
@@ -1793,6 +1818,13 @@ int main (int argc, char *argv[]) {
 							upperIndexes[3]++;
 						}
 					}
+					
+					if(testing == 1) {
+						printConnection(connections[finalConnection]);
+						printf(" %s", bramNumber);
+						printf("-----------------------------------------------------\n");
+					}
+					
 				}
 			}
 		}
@@ -2050,6 +2082,7 @@ int main (int argc, char *argv[]) {
 			count++;
 		}
 	}
+	fclose(roundSBoxes);
 	
 	int xorAfterFinal = 0;
 	int bitCount = 0;
@@ -2077,29 +2110,30 @@ int main (int argc, char *argv[]) {
 							if(testing == 1) {
 								printf("%d     ", bitCount);
 								printf(finalSBoxes[sbIndex].LUT8s[i].name);
+								printf("\n");
 							}
 							
 							foundLUTs = 0;
 							testString[0] = 0;
 							
-							
-							
 							if(finalSBoxes[sbIndex].LUT8s[i].LUT6s[0] == 1) {
 								xorAfterFinal = nextLUT(finalSBoxes[sbIndex].LUT8s[i].name, "FFMUXC1_OUT1", followingNames, followingTiles, foundLUTs);
 								
-								if(testing == 1)
-									printf("     %s (%s)\n", followingNames[0], followingTiles[0]);
-								
+								//Remove this if basic AES core (no CBC)
 								xorAfterFinal = nextLUT(followingTiles[0], followingNames[0], followingNames, followingTiles, 0);
+								
 							}
 							else {
 								xorAfterFinal = nextLUT(finalSBoxes[sbIndex].LUT8s[i].name, "FFMUXG1_OUT1", followingNames, followingTiles, foundLUTs);
 								
-								if(testing == 1)
-									printf("     %s (%s)\n", followingNames[0], followingTiles[0]);
-								
+								//Remove this if basic AES core (no CBC)
 								xorAfterFinal = nextLUT(followingTiles[0], followingNames[0], followingNames, followingTiles, 0);
+								
 							}
+							
+							//Remove this if basic AES core (no CBC)
+							followingNames[0][1] = 54;	//The number 6
+							followingNames[0][7] = 54;
 							
 							if(testing == 1)
 								printf("     %s (%s)\n", followingNames[0], followingTiles[0]);
@@ -2120,12 +2154,15 @@ int main (int argc, char *argv[]) {
 										strcpy(nextSearchTile, connections[cIndex].endTile);
 										searching = 1;
 										
-										
+										if(testing == 1) {
+											printf("               ");
+											printConnection(connections[nextIndex]);
+										}
 										
 										memcpy(testString, connections[cIndex].beginName, 7);
 										testString[7] = 0;
 										
-										
+										//The connection leaving the slice ends Q or Q* which is where we connect 
 										if(strcmp(testString, "CLE_CLE") == 0 && (connections[cIndex].beginName[strlen(connections[cIndex].beginName) - 1] == 81 || connections[cIndex].beginName[strlen(connections[cIndex].beginName) - 2] == 81)) {
 											searching = 0;
 											if(testing == 1) {
@@ -2250,21 +2287,36 @@ int main (int argc, char *argv[]) {
 	
 	triggerConnections = fopen("./triggerConnections.txt", "w");
 	
+	char foundNames[30][30];
+	char foundTiles[30][30];
+	
 	printf("-----------------FIRST LAYER CONNECTIONS---------------\n");
 	
+	testing = 0;
+	
 	for(int i = 0; i < 128; i++) {
-		printf("%d    ", i);
-		printf(triggerInputNames[i]);
-		printf("   (%s) ---->    ", triggerInputTiles[i]);
-		printf(firstLayerTriggerNames[i]);
-		printf("   (%s)\n", firstLayerTriggerTiles[i]);
+		
+		fprintf(triggerConnections, "%d    %s.%s -> %s.%s", i, triggerInputTiles[i], triggerInputNames[i], firstLayerTriggerTiles[i], firstLayerTriggerNames[i]);
+		fputc(10, triggerConnections);
+
+		//Find the search front from which the trigger can be connected
+		nextLUT(triggerInputTiles[i], triggerInputNames[i], foundNames, foundTiles, 0);
+		
+		if(testing == 1) {
+			printf("%d    ", i);
+			printf(triggerInputNames[i]);
+			printf("   (%s) ---->    ", triggerInputTiles[i]);
+			printf(firstLayerTriggerNames[i]);
+			printf("   (%s)\n", firstLayerTriggerTiles[i]);
+		}
 	}
 	
 	char secondLayerInputTiles[128][30];
 	char secondLayerInputNames[128][30];
+	
 	char secondLayerOutputTiles[128][30];
 	char secondLayerOutputNames[128][30];
-	char tempTile[30];
+	tempTile[0] = 0;
 	char tempName[30];
 	
 	int newTiles = 0;
@@ -2275,8 +2327,13 @@ int main (int argc, char *argv[]) {
 	yAverage = 0;
 	xAverage = 0;
 	
-	testing = 0;
+	int routedThrough = 0;
+	int thirdLayerIndex = 0;
 	
+	char thirdLayerInputTiles[128][30];
+	char thirdLayerInputNames[128][30];
+	
+	//For all XORs following final round LUTs find the closest unused LUT
 	for(int i = 0; i < 128; i++) {
 		
 		//If we see a new tile create a new connection in the and tree
@@ -2296,14 +2353,12 @@ int main (int argc, char *argv[]) {
 			strcpy(secondLayerInputNames[secondLayerIndex], lutName);
 			secondLayerIndex++;
 			
-			
 			getTileCoords(tempTile, &tempX, &tempY);
 			yAverage += tempY;
 			xAverage += tempX;
-			
 			newTiles++;
 			
-			if(newTiles == 5 || i == 127) {
+			if(newTiles == 5) {
 				
 				yAverage = yAverage/newTiles;
 				xAverage = xAverage/newTiles;
@@ -2319,13 +2374,16 @@ int main (int argc, char *argv[]) {
 				} else
 					strcpy(triggerOut, "CLE_CLE_L_SITE_0_A1");
 				
+
+				
 				for(int i = 0; i < 8; i++) {
 					if(closest->LUT6s[i] == 4) {
 						triggerOut[strlen(triggerOut) - 2] = triggerOut[strlen(triggerOut) - 2] + i;
 						closest->LUT6s[i] = 3;
 					}
 				}
-				
+
+					
 				for(int j = secondLayerIndex - newTiles; j < secondLayerIndex; j++) {
 					strcpy(secondLayerOutputTiles[j], closest->name);
 					strcpy(secondLayerOutputNames[j], triggerOut);
@@ -2333,7 +2391,17 @@ int main (int argc, char *argv[]) {
 				}
 				
 				newTiles = 0;
+				yAverage = 0;
+				xAverage = 0;
 			}	
+		}
+		else if(i == 127) {
+			for(int j = 0; j < newTiles; j++) {
+				strcpy(thirdLayerInputTiles[thirdLayerIndex], secondLayerInputTiles[25]);
+				strcpy(thirdLayerInputNames[thirdLayerIndex], secondLayerInputNames[25]);
+				thirdLayerIndex++;
+				routedThrough++;
+			}
 		}
 	}
 	
@@ -2346,28 +2414,33 @@ int main (int argc, char *argv[]) {
 	char triggerLutNames[50][30];
 	int triggerLutIndex = 0;
 	
-	for(int i = 0; i < secondLayerIndex; i++) {
-		printf("%d    ", i);
-		printf(secondLayerInputNames[i]);
-		printf("   (%s) ---->    ", secondLayerInputTiles[i]);
-		printf(secondLayerOutputNames[i]);
-		printf("   (%s)\n", secondLayerOutputTiles[i]);
+	for(int i = 0; i < secondLayerIndex - routedThrough; i++) {
+		fprintf(triggerConnections, "%d    %s.%s -> %s.%s", i, secondLayerInputTiles[i], secondLayerInputNames[i], secondLayerOutputTiles[i], secondLayerOutputNames[i]);
+		fputc(10, triggerConnections);
+		
+		strcpy(triggerLutTiles[triggerLutIndex], secondLayerInputTiles[i]);
+		strcpy(triggerLutNames[triggerLutIndex], secondLayerInputNames[i]);
+		triggerLutIndex++;
+		
+		if(testing == 1) {
+			printf("%d    ", i);
+			printf(secondLayerInputNames[i]);
+			printf("   (%s) ---->    ", secondLayerInputTiles[i]);
+			printf(secondLayerOutputNames[i]);
+			printf("   (%s)\n", secondLayerOutputTiles[i]);
+		}
 	}
 	
 	tempTile[0] = 0;
 	tempName[0] = 0;
-	newTiles = 0;
-	
-	char thirdLayerInputTiles[128][30];
-	char thirdLayerInputNames[128][30];
+	newTiles = routedThrough;
+	yAverage = 0;
+	xAverage = 0;
 	
 	char thirdLayerOutputTiles[128][30];
 	char thirdLayerOutputNames[128][30];
-	int thirdLayerIndex = 0;
 	
-	
-	
-	for(int i = 0; i < secondLayerIndex - 1; i++) {
+	for(int i = 0; i < secondLayerIndex - routedThrough; i++) {
 		
 		//If we see a new tile create a new connection in the and tree
 		if(strcmp(tempTile, secondLayerOutputTiles[i]) != 0) {
@@ -2432,6 +2505,8 @@ int main (int argc, char *argv[]) {
 				}
 				
 				newTiles = 0;
+				yAverage = 0;
+				xAverage = 0;
 			}	
 		}
 	}
@@ -2442,7 +2517,7 @@ int main (int argc, char *argv[]) {
 	fputc(10, triggerConnections);
 	
 	for(int i = 0; i < thirdLayerIndex; i++) {
-		fprintf(triggerConnections, "%d     %s.%s -> %s.%s", i, thirdLayerInputTiles[i], thirdLayerInputNames[i], thirdLayerOutputTiles[i], thirdLayerOutputNames[i]);
+		fprintf(triggerConnections, "%d    %s.%s -> %s.%s", i, thirdLayerInputTiles[i], thirdLayerInputNames[i], thirdLayerOutputTiles[i], thirdLayerOutputNames[i]);
 		fputc(10, triggerConnections);
 		
 		strcpy(triggerLutTiles[triggerLutIndex], thirdLayerInputTiles[i]);
@@ -2450,13 +2525,38 @@ int main (int argc, char *argv[]) {
 		triggerLutIndex++;
 		
 		//TESTING
-		printf("%d    ", i);
-		printf(thirdLayerInputNames[i]);
-		printf("   (%s) ---->    ", thirdLayerInputTiles[i]);
-		printf(thirdLayerOutputNames[i]);
-		printf("   (%s)\n", thirdLayerOutputTiles[i]);
+		if(testing == 1) {
+			printf("%d    ", i);
+			printf(thirdLayerInputNames[i]);
+			printf("   (%s) ---->    ", thirdLayerInputTiles[i]);
+			printf(thirdLayerOutputNames[i]);
+			printf("   (%s)\n", thirdLayerOutputTiles[i]);
+		}
 	}
 	
+	printf("-----------------------ONE HOT LUTS-----------------------\n");
+	for(int i = 0; i < secondLayerIndex; i++){
+		printf("%s.%s\n", triggerLutTiles[i], triggerLutNames[i]);
+	}
 	
+	printf("-----------------------AND LUTS-----------------------\n");
+	for(int i = secondLayerIndex; i < triggerLutIndex; i++){
+		printf("%s.%s\n", triggerLutTiles[i], triggerLutNames[i]);
+	}
+	
+	strcpy(lutName, "A6LUT_O6");
+	lutName[0] = thirdLayerOutputNames[0][strlen(thirdLayerOutputNames[0]) - 2];
+	printf("%s.%s\n", thirdLayerOutputTiles[0], lutName);
+	
+	//TO DO - find the paths between the trigger output and the flip-flops of the final round S-Boxes
+	for(int i = 0; i < sBoxIndex; i++) {
+		
+		if(finalSBoxes[i].round == 10) {
+		
+			
+		
+		}
+		
+	}
 	
 }
