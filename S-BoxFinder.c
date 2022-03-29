@@ -72,6 +72,8 @@ int searchDone = 0;
 char foundTile[20];
 char initialTile[30];
 
+FILE * triggerConnections;
+
 //Recursive methods to find and return name and tile of all LUTs following a given port
 int nextLUT(char tile[], char name[], char foundNames[][30], char foundTiles[][30], int foundLUTs) {
 		
@@ -877,9 +879,9 @@ int main (int argc, char *argv[]) {
 	char nextLine[30];
 	char bramConnectionDictionary[200][3][30];
 	
-	FILE *bramDictionary = fopen("./bramConnections.txt", "r"); 
-	FILE *logicDictionary = fopen("./formattedLogic.txt", "r"); 
-	FILE *tileDictionary = fopen("./formattedTiles.txt", "r"); 
+	FILE *bramDictionary = fopen("./Dictionaries/bramConnections.txt", "r"); 
+	FILE *logicDictionary = fopen("./Dictionaries/formattedLogic.txt", "r"); 
+	FILE *tileDictionary = fopen("./Dictionaries/formattedTiles.txt", "r"); 
 	int tileX, tileY;
 	int bramIndex = 0;
 	while(fgets(nextLine, 30, bramDictionary) != NULL) {
@@ -1760,6 +1762,7 @@ int main (int argc, char *argv[]) {
 				
 				
 				if(j == 5) {
+					//if(tempY > 175) {
 					if(tempX == 8) {
 						if(atoi(bramNumber) < 3) {
 							wordGroups[0][lowerIndexes[0]] = i;
@@ -2059,6 +2062,8 @@ int main (int argc, char *argv[]) {
 	char triggerInputNames[128][30];
 	char triggerInputTiles[128][30];
 	
+	testing = 0;
+	
 	for(int mapIndex = 0; mapIndex < 16; mapIndex++) {
 		for(int sbIndex = 0; sbIndex < sBoxIndex; sbIndex++) {
 			if(finalSBoxes[sbIndex].round == 10 && finalSBoxes[sbIndex].byte == byteMapping[mapIndex]) {
@@ -2079,10 +2084,22 @@ int main (int argc, char *argv[]) {
 							
 							
 							
-							if(finalSBoxes[sbIndex].LUT8s[i].LUT6s[0] == 1)
+							if(finalSBoxes[sbIndex].LUT8s[i].LUT6s[0] == 1) {
 								xorAfterFinal = nextLUT(finalSBoxes[sbIndex].LUT8s[i].name, "FFMUXC1_OUT1", followingNames, followingTiles, foundLUTs);
-							else
+								
+								if(testing == 1)
+									printf("     %s (%s)\n", followingNames[0], followingTiles[0]);
+								
+								xorAfterFinal = nextLUT(followingTiles[0], followingNames[0], followingNames, followingTiles, 0);
+							}
+							else {
 								xorAfterFinal = nextLUT(finalSBoxes[sbIndex].LUT8s[i].name, "FFMUXG1_OUT1", followingNames, followingTiles, foundLUTs);
+								
+								if(testing == 1)
+									printf("     %s (%s)\n", followingNames[0], followingTiles[0]);
+								
+								xorAfterFinal = nextLUT(followingTiles[0], followingNames[0], followingNames, followingTiles, 0);
+							}
 							
 							if(testing == 1)
 								printf("     %s (%s)\n", followingNames[0], followingTiles[0]);
@@ -2231,6 +2248,8 @@ int main (int argc, char *argv[]) {
 		}
 	}
 	
+	triggerConnections = fopen("./triggerConnections.txt", "w");
+	
 	printf("-----------------FIRST LAYER CONNECTIONS---------------\n");
 	
 	for(int i = 0; i < 128; i++) {
@@ -2319,6 +2338,13 @@ int main (int argc, char *argv[]) {
 	}
 	
 	printf("-----------------SECOND LAYER CONNECTIONS---------------\n");
+	
+	fputs("-----------------SECOND LAYER CONNECTIONS---------------", triggerConnections);
+	fputc(10, triggerConnections);
+	
+	char triggerLutTiles[50][30];
+	char triggerLutNames[50][30];
+	int triggerLutIndex = 0;
 	
 	for(int i = 0; i < secondLayerIndex; i++) {
 		printf("%d    ", i);
@@ -2412,12 +2438,25 @@ int main (int argc, char *argv[]) {
 	
 	printf("-----------------THIRD LAYER CONNECTIONS---------------\n");
 	
-	for(int i = 0; i <= thirdLayerIndex; i++) {
+	fputs("-----------------THIRD LAYER CONNECTIONS---------------", triggerConnections);
+	fputc(10, triggerConnections);
+	
+	for(int i = 0; i < thirdLayerIndex; i++) {
+		fprintf(triggerConnections, "%d     %s.%s -> %s.%s", i, thirdLayerInputTiles[i], thirdLayerInputNames[i], thirdLayerOutputTiles[i], thirdLayerOutputNames[i]);
+		fputc(10, triggerConnections);
+		
+		strcpy(triggerLutTiles[triggerLutIndex], thirdLayerInputTiles[i]);
+		strcpy(triggerLutNames[triggerLutIndex], thirdLayerInputNames[i]);
+		triggerLutIndex++;
+		
+		//TESTING
 		printf("%d    ", i);
 		printf(thirdLayerInputNames[i]);
 		printf("   (%s) ---->    ", thirdLayerInputTiles[i]);
 		printf(thirdLayerOutputNames[i]);
 		printf("   (%s)\n", thirdLayerOutputTiles[i]);
 	}
+	
+	
 	
 }
