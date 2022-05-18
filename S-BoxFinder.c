@@ -297,6 +297,122 @@ int nextLUTorMUX(char tile[], char name[], char foundNames[][30], char foundTile
 	return foundLUTs;
 }
 
+void findFollowingSBox(int sBIndex, int lutIndex, char startName[]) {
+
+	int foundLUTs = 0;
+	int tempIndex = 0;
+	
+	char sBoxNamesFollowing[60][30];
+	char sBoxTilesFollowing[60][30];
+	
+	char followingNames[7][30];
+	char followingTiles[7][30];
+	
+	//TESTING
+	if(testing == 1) {
+		printTile(finalSBoxes[sBIndex].LUT8s[lutIndex]);
+	}
+	
+	int followingLUTs = nextLUT(finalSBoxes[sBIndex].LUT8s[lutIndex].name, startName, followingNames, followingTiles, foundLUTs);
+	
+	//If one LUT follows then the S-Box is in round 10
+	if(followingLUTs == 1) {
+		finalSBoxes[sBIndex].round = 10;
+		return;
+	}
+	//Else if 2 follow then it is used in key generation
+	else if(followingLUTs == 2) {
+		finalSBoxes[sBIndex].round = -1;
+		return;
+	}
+	
+	//For each of the following LUTs found, find the following S-Box
+	for(int fIndex = 0; fIndex < followingLUTs; fIndex++) {
+	
+		//If the following name is an LUT change the 5s to 6s - A5LUT_O5 -> A6LUT_O6
+		//TO DO - define L and SIX
+		if(followingNames[fIndex][2] == 76) {
+			followingNames[fIndex][1] = 54;
+			followingNames[fIndex][7] = 54;
+		}
+		
+		//TESTING
+		if(testing == 1) {
+			printf("     %s (%s)\n ", followingNames[fIndex], followingTiles[fIndex]);
+		}
+		
+		//Initialise the initial tile for the search
+		strcpy(initialTile, followingTiles[fIndex]);
+	
+		//Search for how many LUTs and MUXs immediately follow the LUT
+		tempIndex = nextLUTorMUX(followingTiles[fIndex], followingNames[fIndex], sBoxNamesFollowing, sBoxTilesFollowing, 0);
+		//testing = 1;
+		
+		//For each of the found MUXs and LUTs identify the S-Box to which they belong
+		for(int i = 0; i < tempIndex; i++) {
+		
+			//TESTING
+			if(testing == 1) {
+				printf("              %s (%s) ", sBoxNamesFollowing[i], sBoxTilesFollowing[i]);
+			}
+			
+			//Search the LUT8s comprising all known S-Boxes
+			for(int j = 0; j < sBoxIndex; j++) {
+				for(int k = 0; k < 8; k++) {
+				
+					//If the tile name matches
+					if(strcmp(finalSBoxes[j].LUT8s[k].name, sBoxTilesFollowing[i]) == 0) {
+					
+						//If the LUT8 is implemeted on A-D and name starts A-E, 
+						//or the LUT8 is implemeted on A-D and the MUX is BOT 
+						if((finalSBoxes[j].LUT8s[k].LUT6s[0] == 1 && sBoxNamesFollowing[i][0] < 69) ||
+							(finalSBoxes[j].LUT8s[k].LUT6s[0] == 1 && sBoxNamesFollowing[i][6] == 66)) {
+							
+							//Testing   
+							if(testing == 1)
+								printf("%d, ", j);
+							
+							//If the found index has already been found break (see permutaion findings)
+							if(finalSBoxes[sBIndex].followingSBoxes[fIndex] == j) {
+								j = sBoxIndex; 
+								k = 8;
+								i = tempIndex;
+							}
+							//Else set 
+							else
+								finalSBoxes[sBIndex].followingSBoxes[fIndex] = j;
+						}
+						else if(((finalSBoxes[j].LUT8s[k].LUT6s[7] == 1 && sBoxNamesFollowing[i][0] > 68) && strlen(sBoxNamesFollowing[i]) < 9)||
+						   (finalSBoxes[j].LUT8s[k].LUT6s[7] == 1 && sBoxNamesFollowing[i][6] == 84)) {
+							
+							if(testing == 1)
+								printf("%d, ", j);
+							
+							
+							//If the found index has already been found break (see permutaion findings)
+							if(finalSBoxes[sBIndex].followingSBoxes[fIndex] == j) {
+								j = sBoxIndex; 
+								k = 8;
+								i = tempIndex;
+							}
+							//Else set 
+							else
+								finalSBoxes[sBIndex].followingSBoxes[fIndex] = j;
+							
+						}
+					}
+				}
+			}
+			
+			if(testing == 1)
+				printf("\n");
+		}
+		
+		if(testing == 1)
+			printf("\n");
+	}
+}
+
 //A method to extract the Cartesian coordinates of a tile
 void getTileCoords(char tile[], int* x, int* y) {
 	
@@ -1394,209 +1510,23 @@ int main (int argc, char *argv[]) {
 	int tempIndex = 0;
 	char sBoxNamesFollowing[60][30];
 	char sBoxTilesFollowing[60][30];
-	//testing = 1;
+	testing = 0;
 	
 	//Detect the 5 S-Boxes following each S-Box in rounds 1 - 9
 	//For all S-Boxes and LUT8s comprising them, find the 7th bit and use this for the search (see permutation findings)
 	//TO DO remove as method and pass parameters of: FFMUXC1_OUT1/FFMUXG1_OUT, and that's it
 	for(int i = 0; i < sBoxIndex; i++) {
 		for(int j = 0; j < 8; j++) {
-
-			foundLUTs = 0;
-			tempIndex = 0;
-			
-			//If the LUT8 is implemented using LUT6s A-D and represents bit 7 
 			//TO DO - change this to if(bit == 7) { {if(A-D) {} else if(E-H){} }
 			if(finalSBoxes[i].LUT8s[j].LUT6s[0] == 1 && finalSBoxes[i].LUT8s[j].bitA == 7) {
-				
-				//Detect the number of LUTs immediately following the output of the LUT8
-				followTest = nextLUT(finalSBoxes[i].LUT8s[j].name, "FFMUXC1_OUT1", followingNames, followingTiles, foundLUTs);
-				
-				//If one LUT follows then the S-Box is in round 10
-				if(followTest == 1) {
-					finalSBoxes[i].round = 10;
-					break;
-				}
-				//Else if 2 follow then it is used in key generation
-				else if(followTest == 2) {
-					finalSBoxes[i].round = -1;
-					break;
-				}
-				
-				//TESTING
-				if(testing == 1) {
-					printTile(finalSBoxes[i].LUT8s[j]);
-				}
-				
-				//For each of the following LUTs found, find the following S-Box
-				for(int k = 0; k < followTest; k++) {
-					
-					//If the following name is an LUT change the 5s to 6s - A5LUT_O5 -> A6LUT_O6
-					if(followingNames[k][2] == 76) {
-						followingNames[k][1] = 54;
-						followingNames[k][7] = 54;
-					}
-					
-					//TESTING
-					if(testing == 1) {
-						printf("     %s (%s)\n ", followingNames[k], followingTiles[k]);
-					}
-					
-					//Initialise the initial tile for the search
-					strcpy(initialTile, followingTiles[k]);
-					
-					//Search for how many LUTs and MUXs immediately follow the LUT
-					tempIndex = nextLUTorMUX(followingTiles[k], followingNames[k], sBoxNamesFollowing, sBoxTilesFollowing, 0);
-					//testing = 1;
-					//For each of the found MUXs and LUTs identify the S-Box to which they belong
-					for(int l = 0; l < tempIndex; l++) {
-						
-						//TESTING
-						if(testing == 1) {
-							printf("              %s (%s) ", sBoxNamesFollowing[l], sBoxTilesFollowing[l]);
-						}
-						
-						//Search the LUT8s comprising all known S-Boxes
-						for(int m = 0; m < sBoxIndex; m++) {
-							for(int n = 0; n < 8; n++) {
-								
-								//If the tile name matches
-								if(strcmp(finalSBoxes[m].LUT8s[n].name, sBoxTilesFollowing[l]) == 0) {
-									
-									//If the LUT8 is implemeted on A-D and name starts A-E, 
-									//or the LUT8 is implemeted on A-D and the MUX is BOT 
-									if((finalSBoxes[m].LUT8s[n].LUT6s[0] == 1 && sBoxNamesFollowing[l][0] < 69) ||
-									   (finalSBoxes[m].LUT8s[n].LUT6s[0] == 1 && sBoxNamesFollowing[l][6] == 66)) {
-										   
-										//Testing   
-										if(testing == 1)
-											printf("%d, ", m);
-										
-										//If the found index has already been found break (se permutaion findings)
-										if(finalSBoxes[i].followingSBoxes[k] == m) {
-											m = sBoxIndex; 
-											n = 8;
-											l = tempIndex;
-										}
-										//Else set 
-										else
-											finalSBoxes[i].followingSBoxes[k] = m;
-										
-									}
-									else if(((finalSBoxes[m].LUT8s[n].LUT6s[7] == 1 && sBoxNamesFollowing[l][0] > 68) && strlen(sBoxNamesFollowing[l]) < 9)||
-									   (finalSBoxes[m].LUT8s[n].LUT6s[7] == 1 && sBoxNamesFollowing[l][6] == 84)) {
-										
-										if(testing == 1)
-											printf("%d (%d), ", m, finalSBoxes[m].LUT8s[n].LUT6s[7]);
-										
-										
-										if(finalSBoxes[i].followingSBoxes[k] == m) {
-											m = sBoxIndex; 
-											n = 8;
-											l = tempIndex;
-										}
-										else
-											finalSBoxes[i].followingSBoxes[k] = m;
-										
-									}
-								}
-							}
-						}
-						if(testing == 1)
-							printf("\n");
-					}
-				}
-				if(testing == 1)
-					printf("\n");
+				findFollowingSBox(i, j, "FFMUXC1_OUT1");
 			}
-			//Else if the LUT8 is implemented using LUT6s E-H and implements bit 7 
 			else if(finalSBoxes[i].LUT8s[j].LUT6s[7] == 1 && finalSBoxes[i].LUT8s[j].bitE == 7) {
-				
-				if(testing == 1)
-					printTile(finalSBoxes[i].LUT8s[j]);
-				
-				//Detect the number of LUTs immediately following the output of the LUT8
-				followTest = nextLUT(finalSBoxes[i].LUT8s[j].name, "FFMUXG1_OUT1", followingNames, followingTiles, foundLUTs);
-				
-				
-				if(followTest == 1) {
-					finalSBoxes[i].round = 10;
-					break;
-				}
-				else if(followTest == 2) {
-					finalSBoxes[i].round = -1;
-					break;
-				}
-				
-				
-				for(int k = 0; k < followTest; k++) {
-					//What does this do?
-					if(followingNames[k][2] == 76) {
-						followingNames[k][1] = 54;
-						followingNames[k][7] = 54;
-					}
-					
-					
-					if(testing == 1)
-						printf("     %s (%s)\n", followingNames[k], followingTiles[k]);
-					
-					strcpy(initialTile, followingTiles[k]);
-					
-					tempIndex = nextLUTorMUX(followingTiles[k], followingNames[k], sBoxNamesFollowing, sBoxTilesFollowing, 0);
-					//testing = 1;
-					for(int l = 0; l < tempIndex; l++) {
-						
-						if(testing == 1)
-							printf("              %s (%s) ", sBoxNamesFollowing[l], sBoxTilesFollowing[l]);
-						
-						for(int m = 0; m < sBoxIndex; m++) {
-							for(int n = 0; n < 8; n++) {
-								if(strcmp(finalSBoxes[m].LUT8s[n].name, sBoxTilesFollowing[l]) == 0) {
-									if((finalSBoxes[m].LUT8s[n].LUT6s[0] == 1 && sBoxNamesFollowing[l][0] < 69) ||
-									   (finalSBoxes[m].LUT8s[n].LUT6s[0] == 1 && sBoxNamesFollowing[l][6] == 66)) {
-										
-										if(testing == 1) 
-											printf("%d - ", m);
-										
-										if(finalSBoxes[i].followingSBoxes[k] == m) {
-											m = sBoxIndex; 
-											n = 8;
-											l = tempIndex;
-										}
-										else		
-											finalSBoxes[i].followingSBoxes[k] = m;
-									}
-									else if( ((finalSBoxes[m].LUT8s[n].LUT6s[7] == 1 && sBoxNamesFollowing[l][0] > 68) && strlen(sBoxNamesFollowing[l]) < 9) ||
-											(finalSBoxes[m].LUT8s[n].LUT6s[7] == 1 && sBoxNamesFollowing[l][6] == 84)) {
-										
-										if(testing == 1) {
-											printf("%d, ", m);
-										}
-										
-										
-										if(finalSBoxes[i].followingSBoxes[k] == m) {
-											m = sBoxIndex; 
-											n = 8;
-											l = tempIndex;
-										}
-										else
-											finalSBoxes[i].followingSBoxes[k] = m;
-										
-									}
-								}
-							}
-						}
-						if(testing == 1)
-							printf("\n");
-					}
-				}
-				if(testing == 1)
-					printf("\n");
+				findFollowingSBox(i, j, "FFMUXG1_OUT1");
 			}
-			
-			printf("\rProgress: %d / %d", i, sBoxIndex);
-			fflush(stdout);
 		}
+		printf("\rProgress: %d / %d", i, sBoxIndex);
+		fflush(stdout);
 	}
 	printf("\rProgress: %d / %d", sBoxIndex, sBoxIndex);
 	fflush(stdout);
